@@ -48,17 +48,23 @@ namespace UnityEditor.Profiler.Memory
 
 		static StaticFields UnpackStaticFields(PackedCrawledMemorySnapshot packedSnapshot, PackedStaticFields psf)
 		{
-			return new StaticFields() { typeDescription = packedSnapshot.typeDescriptions[psf.typeIndex] };
+			var typeDescription = packedSnapshot.typeDescriptions[psf.typeIndex];
+			return new StaticFields()
+			{
+				typeDescription = typeDescription,
+				caption = "static fields of "+typeDescription.name,
+			};
 		}
 
 		static GCHandle UnpackGCHandle(PackedCrawledMemorySnapshot packedSnapshot, PackedGCHandle pgc)
 		{
-			return new GCHandle() { size = packedSnapshot.managedHeap.virtualMachineInformation.pointerSize };
+			return new GCHandle() { size = packedSnapshot.managedHeap.virtualMachineInformation.pointerSize, caption = "gchandle" };
 		}
 
 		static ManagedObject UnpackManagedObject(PackedCrawledMemorySnapshot packedCrawledMemorySnapshot, PackedManagedObject pm)
 		{
-			return new ManagedObject() { address = pm.address, size = pm.size, typeDescription = packedCrawledMemorySnapshot.typeDescriptions[pm.typeIndex] };
+			var typeDescription = packedCrawledMemorySnapshot.typeDescriptions[pm.typeIndex];
+			return new ManagedObject() { address = pm.address, size = pm.size, typeDescription = typeDescription, caption = typeDescription.name };
 		}
 
 		static NativeUnityEngineObject UnpackNativeUnityEngineObject(PackedCrawledMemorySnapshot packedSnapshot, PackedNativeUnityEngineObject packedNativeUnityEngineObject)
@@ -68,7 +74,8 @@ namespace UnityEditor.Profiler.Memory
 				instanceID = packedNativeUnityEngineObject.instanceID,
 				classID = packedNativeUnityEngineObject.classID,
 				className = packedSnapshot.classIDNames[packedNativeUnityEngineObject.classID],
-				name = packedNativeUnityEngineObject.name
+				name = packedNativeUnityEngineObject.name,
+				caption = packedNativeUnityEngineObject.name + "(className)"
 			};
 		}
 	}

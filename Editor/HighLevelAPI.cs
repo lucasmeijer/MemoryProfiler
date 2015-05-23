@@ -23,6 +23,7 @@ namespace UnityEditor.Profiler.Memory
 	public class ThingInMemory
 	{
 		public int size;
+		public string caption;
 		public ThingInMemory[] references;
 		public ThingInMemory[] referencedBy;
 	}
