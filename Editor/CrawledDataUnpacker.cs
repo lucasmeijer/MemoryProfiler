@@ -53,6 +53,7 @@ namespace UnityEditor.Profiler.Memory
 			{
 				typeDescription = typeDescription,
 				caption = "static fields of "+typeDescription.name,
+				size = typeDescription.staticFieldBytes.Length
 			};
 		}
 
@@ -75,7 +76,8 @@ namespace UnityEditor.Profiler.Memory
 				classID = packedNativeUnityEngineObject.classID,
 				className = packedSnapshot.classIDNames[packedNativeUnityEngineObject.classID],
 				name = packedNativeUnityEngineObject.name,
-				caption = packedNativeUnityEngineObject.name + "(className)"
+				caption = packedNativeUnityEngineObject.name + "(className)",
+				size = packedNativeUnityEngineObject.size
 			};
 		}
 	}
