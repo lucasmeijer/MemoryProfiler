@@ -1,31 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 
 namespace UnityEditor.Profiler.Memory
 {
-	[Serializable]
-	public class PackedCrawledMemorySnapshot : PackedMemorySnapshot
-	{
-		public PackedManagedObject[] managedObjects;
-		public PackedStaticFields[] packedStaticFields;
-	}
-
-	[Serializable]
-	public class PackedManagedObject
-	{
-		public UInt64 address;
-		public int typeIndex;
-		public int size;
-	}
-
-	[Serializable]
-	public class PackedStaticFields
-	{
-		public int typeIndex;
-	}
-
 	internal class Crawler
 	{
 		private ManagedHeap _heap;
@@ -56,6 +34,11 @@ namespace UnityEditor.Profiler.Memory
 
 			_managedObjects = new List<PackedManagedObject>(_indexOfFirstManagedObject * 3);
 
+			_connections = new List<Connection>(_managedObjects.Count * 3);
+			//we will be adding a lot of connections, but the input format also already had connections. (nativeobject->nativeobject and nativeobject->gchandle). we'll add ours to the ones already there.
+			_connections.AddRange(input.connections);
+		
+			
 			for (int i = 0; i != result.gcHandles.Length; i++)
 				CrawlPointer(result.gcHandles[i].target, indexOfFirstGCHandle + i);
 
@@ -66,6 +49,7 @@ namespace UnityEditor.Profiler.Memory
 			}
 
 			result.managedObjects = _managedObjects.ToArray();
+			result.connections = _connections.ToArray();
 
 			AddManagedToNativeConnectionsAndRestoreObjectHeaders(result.managedObjects, result.nativeObjects);
 
@@ -144,7 +128,7 @@ namespace UnityEditor.Profiler.Memory
 			UInt64 typeInfoAddress;
 			int indexOfObject;
 			bool wasAlreadyCrawled;
-			ParseObjectHeader(bo, out typeInfoAddress, out indexOfObject, out wasAlreadyCrawled);
+			ParseObjectHeader(bo, pointer, out typeInfoAddress, out indexOfObject, out wasAlreadyCrawled);
 
 			_connections.Add(new Connection() {from = indexOfFrom, to = indexOfObject});
 
@@ -177,7 +161,7 @@ namespace UnityEditor.Profiler.Memory
 			}
 		}
 
-		private void ParseObjectHeader(BytesAndOffset bo, out ulong typeInfoAddress, out int indexOfObject, out bool wasAlreadyCrawled)
+		private void ParseObjectHeader(BytesAndOffset bo, UInt64 originalHeapAddress, out ulong typeInfoAddress, out int indexOfObject, out bool wasAlreadyCrawled)
 		{
 			var pointer1 = bo.ReadPointer();
 			var pointer2 = bo.Add(_heap.virtualMachineInformation.pointerSize);
@@ -187,7 +171,7 @@ namespace UnityEditor.Profiler.Memory
 				wasAlreadyCrawled = false;
 				indexOfObject = _managedObjects.Count + _indexOfFirstManagedObject;
 				typeInfoAddress = pointer1;
-				_managedObjects.Add(new PackedManagedObject() {address = bo.originalHeapAddress, size = 0, typeIndex = _typeInfoToTypeDescription[pointer1].typeIndex});
+				_managedObjects.Add(new PackedManagedObject() { address = originalHeapAddress, size = 0, typeIndex = _typeInfoToTypeDescription[pointer1].typeIndex });
 			
 				//okay, we gathered all information, now lets set the mark bit, and store the index for this object in the 2nd pointer of the header, which is rarely used.
 				bo.WritePointer(pointer1 | 1);
@@ -222,78 +206,6 @@ namespace UnityEditor.Profiler.Memory
 		private static ulong ClearMarkBit(ulong pointer1)
 		{
 			return pointer1 & unchecked((ulong)-1);
-		}
-	}
-
-	internal struct BytesAndOffset
-	{
-		public byte[] bytes;
-		public int offset;
-		public int pointerSize;
-		public UInt64 originalHeapAddress;
-		public bool IsValid { get { return bytes != null; }}
-
-		public UInt64 ReadPointer()
-		{
-			if (pointerSize == 4)
-				return BitConverter.ToUInt32(bytes, offset);
-			if (pointerSize == 8)
-				return BitConverter.ToUInt64(bytes, offset);
-			throw new ArgumentException("Unexpected pointersize: " + pointerSize);
-		}
-
-		public Int32 ReadInt32()
-		{
-			return BitConverter.ToInt32(bytes, offset);
-		}
-
-		public BytesAndOffset Add(int add)
-		{
-			return new BytesAndOffset() {bytes = bytes, offset = offset + add, pointerSize = pointerSize};
-		}
-
-		public void WritePointer(UInt64 value)
-		{
-			bytes[offset+0] = (byte)(value >> 24);
-			bytes[offset+1] = (byte)(value >> 16);
-			bytes[offset+2] = (byte)(value >> 8);
-			bytes[offset+3] = (byte)(value);
-		}
-
-		public BytesAndOffset NextPointer()
-		{
-			return Add(pointerSize);
-		}
-	}
-
-	static class ManagedHeapExtensions
-	{
-		public static BytesAndOffset Find(this ManagedHeap heap, UInt64 address)
-		{
-			foreach(var segment in heap.segments)
-				if (address >= segment.startAddress && address < (segment.startAddress + (ulong) segment.bytes.Length))
-					return new BytesAndOffset() { bytes = segment.bytes, offset = (int)(address - segment.startAddress), originalHeapAddress = address };
-
-			return new BytesAndOffset();
-		}
-
-		public static int ReadArrayLength(this ManagedHeap heap, UInt64 address, TypeDescription arrayType)
-		{
-			var bo = heap.Find(address);
-
-			var bounds = bo.Add(heap.virtualMachineInformation.arrayBoundsOffsetInHeader).ReadPointer();
-
-			if (bounds == 0)
-				return bo.Add(heap.virtualMachineInformation.arraySizeOffsetInHeader).ReadInt32();
-
-			var cursor = heap.Find(bounds);
-			int length = 0;
-			for (int i = 0; i != arrayType.ArrayRank; i++)
-			{
-				length += cursor.ReadInt32();
-				cursor = cursor.Add(8);
-			}
-			return length;
 		}
 	}
 }
