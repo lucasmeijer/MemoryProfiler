@@ -12,7 +12,7 @@ namespace UnityEditor.Profiler.Memory
 		private Dictionary<UInt64, TypeDescription> _typeInfoToTypeDescription;
 		private int _indexOfFirstManagedObject;
 		private List<PackedManagedObject> _managedObjects;
-		private Dictionary<int, UInt64> _pointer2Backups = new Dictionary<int, ulong>(); 
+		private Dictionary<int, UInt64> _pointer2Backups = new Dictionary<int, ulong>();
 
 		public PackedCrawledMemorySnapshot Crawl(PackedMemorySnapshot input)
 		{
@@ -45,7 +45,7 @@ namespace UnityEditor.Profiler.Memory
 			for (int i = 0; i != result.packedStaticFields.Length; i++)
 			{
 				var typeDescription = input.typeDescriptions[result.packedStaticFields[i].typeIndex];
-				CrawlRawObjectData(new BytesAndOffset() {bytes = typeDescription.staticFieldBytes, offset = 0}, typeDescription, true, indexOfFirstStaticFields + i);
+				CrawlRawObjectData(new BytesAndOffset {bytes = typeDescription.staticFieldBytes, offset = 0}, typeDescription, true, indexOfFirstStaticFields + i);
 			}
 
 			result.managedObjects = _managedObjects.ToArray();
@@ -63,16 +63,17 @@ namespace UnityEditor.Profiler.Memory
 			for (int i = 0; i != managedObjects.Length; i++)
 			{
 				var managedObjectIndex = i + _indexOfFirstManagedObject;
-				var managedObject = managedObjects[i];
-				var typeInfoAddress = RestoreObjectHeader(managedObject, managedObjectIndex);
+				var address = managedObjects[i].address;
 
-				if (DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex))
-				{
-					var instanceID = _heap.Find(managedObject.address + (UInt64) instanceIDOffset).ReadInt32();
-					var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceID == instanceID);
-					if (indexOfNativeObject != -1)
-						_connections.Add(new Connection() {@from = managedObjectIndex, to = indexOfNativeObject});
-				}
+				var typeInfoAddress = RestoreObjectHeader(address, managedObjectIndex);
+
+				if (!DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex)) 
+					continue;
+
+				var instanceID = _heap.Find(address + (UInt64)instanceIDOffset).ReadInt32();
+				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceID == instanceID);
+				if (indexOfNativeObject != -1)
+					_connections.Add(new Connection {@from = managedObjectIndex, to = indexOfNativeObject});
 			}
 		}
 
@@ -86,9 +87,9 @@ namespace UnityEditor.Profiler.Memory
 			return DerivesFrom(baseIndex, potentialBase);
 		}
 
-		private ulong RestoreObjectHeader(PackedManagedObject managedObject, int managedObjectIndex)
+		private ulong RestoreObjectHeader(ulong address, int managedObjectIndex)
 		{
-			var bo = _heap.Find(managedObject.address);
+			var bo = _heap.Find(address);
 			var typeInfoAddress = bo.ReadPointer() & unchecked((ulong)-1);
 			bo.WritePointer(typeInfoAddress);
 
@@ -107,7 +108,7 @@ namespace UnityEditor.Profiler.Memory
 
 				var fieldType = _typeDescriptions[field.typeIndex];
 
-				var fieldLocation = bytesAndOffset.Add(field.offset);
+				var fieldLocation = bytesAndOffset.Add(field.offset - (useStaticFields ? 0 : _heap.virtualMachineInformation.objectHeaderSize));
 
 				if (fieldType.IsValueType)
 				{
