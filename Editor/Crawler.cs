@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
-using System.Runtime.Remoting.Channels;
-using System.Text;
+using System.Runtime.InteropServices;
 
 namespace UnityEditor.Profiler.Memory
 {
@@ -35,7 +33,8 @@ namespace UnityEditor.Profiler.Memory
 		private TypeDescription[] _typeDescriptions;
 		private Dictionary<UInt64, TypeDescription> _typeInfoToTypeDescription;
 		private int _indexOfFirstManagedObject;
-		private List<PackedManagedObject> _managedObjects; 
+		private List<PackedManagedObject> _managedObjects;
+		private Dictionary<int, UInt64> _pointer2Backups = new Dictionary<int, ulong>(); 
 
 		public PackedCrawledMemorySnapshot Crawl(PackedMemorySnapshot input)
 		{
@@ -67,7 +66,52 @@ namespace UnityEditor.Profiler.Memory
 			}
 
 			result.managedObjects = _managedObjects.ToArray();
+
+			AddManagedToNativeConnectionsAndRestoreObjectHeaders(result.managedObjects, result.nativeObjects);
+
 			return result;
+		}
+
+		private void AddManagedToNativeConnectionsAndRestoreObjectHeaders(PackedManagedObject[] managedObjects, PackedNativeUnityEngineObject[] nativeObjects)
+		{
+			var unityEngineObjectTypeDescription = _typeDescriptions.First(td => td.name == "UnityEngine.Object");
+			var instanceIDOffset = unityEngineObjectTypeDescription.fields.Single(f => f.name == "m_InstanceID").offset;
+			for (int i = 0; i != managedObjects.Length; i++)
+			{
+				var managedObjectIndex = i + _indexOfFirstManagedObject;
+				var managedObject = managedObjects[i];
+				var typeInfoAddress = RestoreObjectHeader(managedObject, managedObjectIndex);
+
+				if (DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex))
+				{
+					var instanceID = _heap.Find(managedObject.address + (UInt64) instanceIDOffset).ReadInt32();
+					var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceID == instanceID);
+					if (indexOfNativeObject != -1)
+						_connections.Add(new Connection() {@from = managedObjectIndex, to = indexOfNativeObject});
+				}
+			}
+		}
+
+		private bool DerivesFrom(int typeIndex, int potentialBase)
+		{
+			if (typeIndex == potentialBase)
+				return true;
+			var baseIndex = _typeDescriptions[typeIndex].baseOrElementTypeIndex;
+			if (baseIndex == unchecked((uint)-1))
+				return false;
+			return DerivesFrom(baseIndex, potentialBase);
+		}
+
+		private ulong RestoreObjectHeader(PackedManagedObject managedObject, int managedObjectIndex)
+		{
+			var bo = _heap.Find(managedObject.address);
+			var typeInfoAddress = bo.ReadPointer() & unchecked((ulong)-1);
+			bo.WritePointer(typeInfoAddress);
+
+			UInt64 restoreValue = 0;
+			_pointer2Backups.TryGetValue(managedObjectIndex, out restoreValue);
+			bo.NextPointer().WritePointer(restoreValue);
+			return typeInfoAddress;
 		}
 
 		private void CrawlRawObjectData(BytesAndOffset bytesAndOffset, TypeDescription typeDescription, bool useStaticFields, int indexOfFrom)
@@ -102,13 +146,35 @@ namespace UnityEditor.Profiler.Memory
 			bool wasAlreadyCrawled;
 			ParseObjectHeader(bo, out typeInfoAddress, out indexOfObject, out wasAlreadyCrawled);
 
-			_connections.Add(new Connection() { from = indexOfFrom, to = indexOfObject });
+			_connections.Add(new Connection() {from = indexOfFrom, to = indexOfObject});
 
 			if (wasAlreadyCrawled)
 				return;
 
 			var typeDescription = _typeInfoToTypeDescription[typeInfoAddress];
-			CrawlRawObjectData(bo.Add(_heap.virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject);
+
+			if (!typeDescription.IsArray)
+			{
+				CrawlRawObjectData(bo.Add(_heap.virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject);
+				return;
+			}
+
+			var arrayLength = _heap.ReadArrayLength(pointer, typeDescription);
+			var elementType = _typeDescriptions[typeDescription.baseOrElementTypeIndex];
+			var cursor = bo.Add(_heap.virtualMachineInformation.arrayHeaderSize);
+			for (int i = 0; i != arrayLength; i++)
+			{
+				if (elementType.IsValueType)
+				{
+					CrawlRawObjectData(cursor, elementType, false, indexOfObject);
+					cursor = cursor.Add(elementType.size);
+				}
+				else
+				{
+					CrawlPointer(cursor.ReadPointer(), indexOfObject);
+					cursor = cursor.NextPointer();
+				}
+			}
 		}
 
 		private void ParseObjectHeader(BytesAndOffset bo, out ulong typeInfoAddress, out int indexOfObject, out bool wasAlreadyCrawled)
@@ -116,7 +182,7 @@ namespace UnityEditor.Profiler.Memory
 			var pointer1 = bo.ReadPointer();
 			var pointer2 = bo.Add(_heap.virtualMachineInformation.pointerSize);
 
-			if ((pointer1 & 1) == 0)
+			if (HasMarkBit(pointer1) == 0)
 			{
 				wasAlreadyCrawled = false;
 				indexOfObject = _managedObjects.Count + _indexOfFirstManagedObject;
@@ -142,10 +208,20 @@ namespace UnityEditor.Profiler.Memory
 			}
 
 			//give typeinfo address back without the markbit
-			typeInfoAddress = pointer1 & unchecked((ulong)-1);
+			typeInfoAddress = ClearMarkBit(pointer1);
 			wasAlreadyCrawled = true;
 			//read the index for this object that we stored in the 2ndpointer field of the header
 			indexOfObject = (int)pointer2.ReadPointer();
+		}
+
+		private static ulong HasMarkBit(ulong pointer1)
+		{
+			return pointer1 & 1;
+		}
+
+		private static ulong ClearMarkBit(ulong pointer1)
+		{
+			return pointer1 & unchecked((ulong)-1);
 		}
 	}
 
@@ -166,7 +242,7 @@ namespace UnityEditor.Profiler.Memory
 			throw new ArgumentException("Unexpected pointersize: " + pointerSize);
 		}
 
-		public Int32 ReadInt32(BytesAndOffset bytesAndOffset)
+		public Int32 ReadInt32()
 		{
 			return BitConverter.ToInt32(bytes, offset);
 		}
@@ -183,6 +259,11 @@ namespace UnityEditor.Profiler.Memory
 			bytes[offset+2] = (byte)(value >> 8);
 			bytes[offset+3] = (byte)(value);
 		}
+
+		public BytesAndOffset NextPointer()
+		{
+			return Add(pointerSize);
+		}
 	}
 
 	static class ManagedHeapExtensions
@@ -194,6 +275,25 @@ namespace UnityEditor.Profiler.Memory
 					return new BytesAndOffset() { bytes = segment.bytes, offset = (int)(address - segment.startAddress), originalHeapAddress = address };
 
 			return new BytesAndOffset();
+		}
+
+		public static int ReadArrayLength(this ManagedHeap heap, UInt64 address, TypeDescription arrayType)
+		{
+			var bo = heap.Find(address);
+
+			var bounds = bo.Add(heap.virtualMachineInformation.arrayBoundsOffsetInHeader).ReadPointer();
+
+			if (bounds == 0)
+				return bo.Add(heap.virtualMachineInformation.arraySizeOffsetInHeader).ReadInt32();
+
+			var cursor = heap.Find(bounds);
+			int length = 0;
+			for (int i = 0; i != arrayType.ArrayRank; i++)
+			{
+				length += cursor.ReadInt32();
+				cursor = cursor.Add(8);
+			}
+			return length;
 		}
 	}
 }
