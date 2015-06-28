@@ -29,6 +29,9 @@ namespace MemoryProfilerWindow
 				managedHeapSections = input.managedHeapSections,
 				nativeObjects = input.nativeObjects,
 				gcHandles = input.gcHandles,
+				nativeTypes = input.nativeTypes,
+				stacks = input.stacks,
+				typeDescriptions = input.typeDescriptions,
 				packedStaticFields = Enumerable.Range(0, input.typeDescriptions.Length).Where(i => input.typeDescriptions[i].staticFieldBytes.Length > 0).Select(i => new PackedStaticFields() {typeIndex = i}).ToArray()
 			};
 

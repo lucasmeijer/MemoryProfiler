@@ -36,7 +36,7 @@ namespace MemoryProfilerWindow
 				combined[i].referencedBy = referencedByLists[i].ToArray();
 			}
 
-			return null;
+			return result;
 		}
 
 		static List<ThingInMemory>[] MakeTempLists(ThingInMemory[] combined)
