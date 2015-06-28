@@ -5,6 +5,7 @@
 //we can develop in an opensource github project, and iterate
 //on outside of the unity release trains. 
 
+/*
 using System;
 
 namespace UnityEditor.Profiler.Memory
@@ -117,4 +118,4 @@ namespace UnityEditor.Profiler.Memory
 		public int typeIndex;
 		public bool isStatic;
 	}
-}
+}*/

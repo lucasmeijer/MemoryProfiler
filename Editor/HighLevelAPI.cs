@@ -1,6 +1,7 @@
 ﻿using System;
+using UnityEditor.MemoryProfiler;
 
-namespace UnityEditor.Profiler.Memory
+namespace MemoryProfilerWindow
 {
 	//this is the highest level dataformat. it can be unpacked from the PackedCrawledMemorySnapshot, which contains all the interesting information we want. The Packed format
 	//however is designed to be serializable and relatively storage compact.  This dataformat is designed to give a nice c# api experience. so while the packed version uses typeIndex,
@@ -15,7 +16,7 @@ namespace UnityEditor.Profiler.Memory
 		//contains concatenation of nativeObjects, gchandles, managedobjects and staticfields
 		public ThingInMemory[] allObjects; 
 
-		public ManagedHeap managedHeap;
+		public ManagedMemorySection[] managedHeap;
 		public TypeDescription[] typeDescriptions;
 		public string[] classIDNames;
 	}

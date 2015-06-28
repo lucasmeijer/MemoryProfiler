@@ -1,28 +1,29 @@
 ﻿using System;
+using UnityEditor.MemoryProfiler;
 
-namespace UnityEditor.Profiler.Memory
+namespace MemoryProfilerWindow
 {
 	static class ManagedHeapExtensions
 	{
-		public static BytesAndOffset Find(this ManagedHeap heap, UInt64 address)
+		public static BytesAndOffset Find(this ManagedMemorySection[] heap, UInt64 address,VirtualMachineInformation virtualMachineInformation)
 		{
-			foreach(var segment in heap.segments)
+			foreach(var segment in heap)
 				if (address >= segment.startAddress && address < (segment.startAddress + (ulong) segment.bytes.Length))
-					return new BytesAndOffset() { bytes = segment.bytes, offset = (int)(address - segment.startAddress) };
+					return new BytesAndOffset() { bytes = segment.bytes, offset = (int)(address - segment.startAddress), pointerSize = virtualMachineInformation.pointerSize };
 
 			return new BytesAndOffset();
 		}
 
-		public static int ReadArrayLength(this ManagedHeap heap, UInt64 address, TypeDescription arrayType)
+		public static int ReadArrayLength(this ManagedMemorySection[] heap, UInt64 address, TypeDescription arrayType, VirtualMachineInformation virtualMachineInformation)
 		{
-			var bo = heap.Find(address);
+			var bo = heap.Find(address, virtualMachineInformation);
 
-			var bounds = bo.Add(heap.virtualMachineInformation.arrayBoundsOffsetInHeader).ReadPointer();
+			var bounds = bo.Add(virtualMachineInformation.arrayBoundsOffsetInHeader).ReadPointer();
 
 			if (bounds == 0)
-				return bo.Add(heap.virtualMachineInformation.arraySizeOffsetInHeader).ReadInt32();
+				return bo.Add(virtualMachineInformation.arraySizeOffsetInHeader).ReadInt32();
 
-			var cursor = heap.Find(bounds);
+			var cursor = heap.Find(bounds, virtualMachineInformation);
 			int length = 0;
 			for (int i = 0; i != arrayType.ArrayRank; i++)
 			{

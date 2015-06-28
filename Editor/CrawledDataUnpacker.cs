@@ -1,7 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using UnityEditor.MemoryProfiler;
 
-namespace UnityEditor.Profiler.Memory
+namespace MemoryProfilerWindow
 {
 	class CrawlDataUnpacker
 	{
@@ -14,7 +15,7 @@ namespace UnityEditor.Profiler.Memory
 				gcHandles = packedSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot, pgc)).ToArray(),
 				staticFields = packedSnapshot.packedStaticFields.Select(psf => UnpackStaticFields(packedSnapshot, psf)).ToArray(),
 				typeDescriptions = packedSnapshot.typeDescriptions,
-				managedHeap = packedSnapshot.managedHeap
+				managedHeap = packedSnapshot.managedHeapSections
 			};
 
 			var combined = new ThingInMemory[0].Concat(result.nativeObjects).Concat(result.gcHandles).Concat(result.managedObjects).Concat(result.staticFields).ToArray();
@@ -59,7 +60,7 @@ namespace UnityEditor.Profiler.Memory
 
 		static GCHandle UnpackGCHandle(PackedCrawledMemorySnapshot packedSnapshot, PackedGCHandle pgc)
 		{
-			return new GCHandle() { size = packedSnapshot.managedHeap.virtualMachineInformation.pointerSize, caption = "gchandle" };
+			return new GCHandle() { size = packedSnapshot.virtualMachineInformation.pointerSize, caption = "gchandle" };
 		}
 
 		static ManagedObject UnpackManagedObject(PackedCrawledMemorySnapshot packedCrawledMemorySnapshot, PackedManagedObject pm)
@@ -72,9 +73,9 @@ namespace UnityEditor.Profiler.Memory
 		{
 			return new NativeUnityEngineObject()
 			{
-				instanceID = packedNativeUnityEngineObject.instanceID,
-				classID = packedNativeUnityEngineObject.classID,
-				className = packedSnapshot.classIDNames[packedNativeUnityEngineObject.classID],
+				instanceID = packedNativeUnityEngineObject.instanceId,
+				classID = packedNativeUnityEngineObject.classId,
+				className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name,
 				name = packedNativeUnityEngineObject.name,
 				caption = packedNativeUnityEngineObject.name + "(className)",
 				size = packedNativeUnityEngineObject.size

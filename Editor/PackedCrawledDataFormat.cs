@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Text;
+using UnityEditor.MemoryProfiler;
 
-namespace UnityEditor.Profiler.Memory
+namespace MemoryProfilerWindow
 {
 	//this is the 2nd level data format: completely packed and serializable, but includes all the results from the crawler. so that means you have managed objects added,
 	//and the connections have been filled in, as the PackedMemorySnapshot provided by the unity runtime only contains connections for native objects to other native objects,
@@ -13,6 +14,10 @@ namespace UnityEditor.Profiler.Memory
 	{
 		public PackedManagedObject[] managedObjects;
 		public PackedStaticFields[] packedStaticFields;
+
+		public int IndexOfFirstGCHandle { get { return nativeObjects.Length; } }
+		public int IndexOfFirstStaticFields { get { return IndexOfFirstGCHandle + gcHandles.Length; } }
+		public int IndexOfFirstManagedObject { get { return IndexOfFirstStaticFields + packedStaticFields.Length; } }
 	}
 
 	[Serializable]

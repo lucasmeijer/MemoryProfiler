@@ -1,59 +1,60 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor.MemoryProfiler;
 
-namespace UnityEditor.Profiler.Memory
+namespace MemoryProfilerWindow
 {
 	internal class Crawler
 	{
-		private ManagedHeap _heap;
+		private ManagedMemorySection[] _heaps;
 		private List<Connection> _connections;
 		private TypeDescription[] _typeDescriptions;
 		private Dictionary<UInt64, TypeDescription> _typeInfoToTypeDescription;
-		private int _indexOfFirstManagedObject;
+
 		private List<PackedManagedObject> _managedObjects;
 		private Dictionary<int, UInt64> _pointer2Backups = new Dictionary<int, ulong>();
+		private VirtualMachineInformation _virtualMachineInformation;
+		PackedCrawledMemorySnapshot _result;
 
 		public PackedCrawledMemorySnapshot Crawl(PackedMemorySnapshot input)
 		{
-			_heap = input.managedHeap;
+			_heaps = input.managedHeapSections;
 			_typeDescriptions = input.typeDescriptions;
 			_typeInfoToTypeDescription = _typeDescriptions.ToDictionary(td => td.typeInfoAddress, td => td);
+			_virtualMachineInformation = input.virtualMachineInformation;
 
-			var result = new PackedCrawledMemorySnapshot
+			_result = new PackedCrawledMemorySnapshot
 			{
-				managedHeap = input.managedHeap,
+				managedHeapSections = input.managedHeapSections,
 				nativeObjects = input.nativeObjects,
 				gcHandles = input.gcHandles,
 				packedStaticFields = Enumerable.Range(0, input.typeDescriptions.Length).Where(i => input.typeDescriptions[i].staticFieldBytes.Length > 0).Select(i => new PackedStaticFields() {typeIndex = i}).ToArray()
 			};
 
-			var indexOfFirstGCHandle = result.nativeObjects.Length;
-			int indexOfFirstStaticFields = indexOfFirstGCHandle + result.gcHandles.Length;
-			_indexOfFirstManagedObject = indexOfFirstStaticFields + result.packedStaticFields.Length;
 
-			_managedObjects = new List<PackedManagedObject>(_indexOfFirstManagedObject * 3);
+			_managedObjects = new List<PackedManagedObject>(_result.IndexOfFirstManagedObject * 3);
 
 			_connections = new List<Connection>(_managedObjects.Count * 3);
 			//we will be adding a lot of connections, but the input format also already had connections. (nativeobject->nativeobject and nativeobject->gchandle). we'll add ours to the ones already there.
 			_connections.AddRange(input.connections);
 		
 			
-			for (int i = 0; i != result.gcHandles.Length; i++)
-				CrawlPointer(result.gcHandles[i].target, indexOfFirstGCHandle + i);
+			for (int i = 0; i != _result.gcHandles.Length; i++)
+				CrawlPointer(_result.gcHandles[i].target, _result.IndexOfFirstGCHandle + i);
 
-			for (int i = 0; i != result.packedStaticFields.Length; i++)
+			for (int i = 0; i != _result.packedStaticFields.Length; i++)
 			{
-				var typeDescription = input.typeDescriptions[result.packedStaticFields[i].typeIndex];
-				CrawlRawObjectData(new BytesAndOffset {bytes = typeDescription.staticFieldBytes, offset = 0}, typeDescription, true, indexOfFirstStaticFields + i);
+				var typeDescription = input.typeDescriptions[_result.packedStaticFields[i].typeIndex];
+				CrawlRawObjectData(new BytesAndOffset {bytes = typeDescription.staticFieldBytes, offset = 0, pointerSize = _virtualMachineInformation.pointerSize}, typeDescription, true, _result.IndexOfFirstStaticFields + i);
 			}
 
-			result.managedObjects = _managedObjects.ToArray();
-			result.connections = _connections.ToArray();
+			_result.managedObjects = _managedObjects.ToArray();
+			_result.connections = _connections.ToArray();
 
-			AddManagedToNativeConnectionsAndRestoreObjectHeaders(result.managedObjects, result.nativeObjects);
+			AddManagedToNativeConnectionsAndRestoreObjectHeaders(_result.managedObjects, _result.nativeObjects);
 
-			return result;
+			return _result;
 		}
 
 		private void AddManagedToNativeConnectionsAndRestoreObjectHeaders(PackedManagedObject[] managedObjects, PackedNativeUnityEngineObject[] nativeObjects)
@@ -62,7 +63,7 @@ namespace UnityEditor.Profiler.Memory
 			var instanceIDOffset = unityEngineObjectTypeDescription.fields.Single(f => f.name == "m_InstanceID").offset;
 			for (int i = 0; i != managedObjects.Length; i++)
 			{
-				var managedObjectIndex = i + _indexOfFirstManagedObject;
+				var managedObjectIndex = i + _result.IndexOfFirstManagedObject;
 				var address = managedObjects[i].address;
 
 				var typeInfoAddress = RestoreObjectHeader(address, managedObjectIndex);
@@ -70,8 +71,8 @@ namespace UnityEditor.Profiler.Memory
 				if (!DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex)) 
 					continue;
 
-				var instanceID = _heap.Find(address + (UInt64)instanceIDOffset).ReadInt32();
-				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceID == instanceID);
+				var instanceID = _heaps.Find(address + (UInt64)instanceIDOffset, _virtualMachineInformation).ReadInt32();
+				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceId == instanceID);
 				if (indexOfNativeObject != -1)
 					_connections.Add(new Connection {@from = managedObjectIndex, to = indexOfNativeObject});
 			}
@@ -82,15 +83,19 @@ namespace UnityEditor.Profiler.Memory
 			if (typeIndex == potentialBase)
 				return true;
 			var baseIndex = _typeDescriptions[typeIndex].baseOrElementTypeIndex;
-			if (baseIndex == unchecked((uint)-1))
+
+			if (baseIndex == -1)
 				return false;
+			
 			return DerivesFrom(baseIndex, potentialBase);
 		}
 
 		private ulong RestoreObjectHeader(ulong address, int managedObjectIndex)
 		{
-			var bo = _heap.Find(address);
-			var typeInfoAddress = bo.ReadPointer() & unchecked((ulong)-1);
+			var bo = _heaps.Find(address, _virtualMachineInformation);
+			var mask = this._virtualMachineInformation.pointerSize == 8 ? System.UInt64.MaxValue - 1 : System.UInt32.MaxValue - 1;
+			var pointer = bo.ReadPointer ();
+			var typeInfoAddress = pointer & mask;
 			bo.WritePointer(typeInfoAddress);
 
 			UInt64 restoreValue = 0;
@@ -106,9 +111,19 @@ namespace UnityEditor.Profiler.Memory
 				if (field.isStatic != useStaticFields)
 					continue;
 
+				if (field.typeIndex == typeDescription.typeIndex && typeDescription.IsValueType) {
+					//this happens in System.Single, which is a weird type that has a field of its own type.
+					continue;
+				}
+
+				if (field.offset == -1) {
+					//this is how we encode TLS fields. todo: actually treat TLS fields as roots
+					continue;
+				}
+
 				var fieldType = _typeDescriptions[field.typeIndex];
 
-				var fieldLocation = bytesAndOffset.Add(field.offset - (useStaticFields ? 0 : _heap.virtualMachineInformation.objectHeaderSize));
+				var fieldLocation = bytesAndOffset.Add(field.offset - (useStaticFields ? 0 : _virtualMachineInformation.objectHeaderSize));
 
 				if (fieldType.IsValueType)
 				{
@@ -122,7 +137,7 @@ namespace UnityEditor.Profiler.Memory
 
 		private void CrawlPointer(UInt64 pointer, int indexOfFrom)
 		{
-			var bo = _heap.Find(pointer);
+			var bo = _heaps.Find(pointer, _virtualMachineInformation);
 			if (!bo.IsValid)
 				return;
 
@@ -140,13 +155,13 @@ namespace UnityEditor.Profiler.Memory
 
 			if (!typeDescription.IsArray)
 			{
-				CrawlRawObjectData(bo.Add(_heap.virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject);
+				CrawlRawObjectData(bo.Add(_virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject);
 				return;
 			}
 
-			var arrayLength = _heap.ReadArrayLength(pointer, typeDescription);
+			var arrayLength = _heaps.ReadArrayLength(pointer, typeDescription,_virtualMachineInformation);
 			var elementType = _typeDescriptions[typeDescription.baseOrElementTypeIndex];
-			var cursor = bo.Add(_heap.virtualMachineInformation.arrayHeaderSize);
+			var cursor = bo.Add(_virtualMachineInformation.arrayHeaderSize);
 			for (int i = 0; i != arrayLength; i++)
 			{
 				if (elementType.IsValueType)
@@ -165,14 +180,16 @@ namespace UnityEditor.Profiler.Memory
 		private void ParseObjectHeader(BytesAndOffset bo, UInt64 originalHeapAddress, out ulong typeInfoAddress, out int indexOfObject, out bool wasAlreadyCrawled)
 		{
 			var pointer1 = bo.ReadPointer();
-			var pointer2 = bo.Add(_heap.virtualMachineInformation.pointerSize);
+			var pointer2 = bo.NextPointer();
 
 			if (HasMarkBit(pointer1) == 0)
 			{
 				wasAlreadyCrawled = false;
-				indexOfObject = _managedObjects.Count + _indexOfFirstManagedObject;
+				indexOfObject = _managedObjects.Count + _result.IndexOfFirstManagedObject;
 				typeInfoAddress = pointer1;
-				_managedObjects.Add(new PackedManagedObject() { address = originalHeapAddress, size = 0, typeIndex = _typeInfoToTypeDescription[pointer1].typeIndex });
+				var typeDescription = _typeInfoToTypeDescription [pointer1];
+				var size = typeDescription.IsArray ? 0 : typeDescription.size;
+				_managedObjects.Add(new PackedManagedObject() { address = originalHeapAddress, size = size, typeIndex = typeDescription.typeIndex });
 			
 				//okay, we gathered all information, now lets set the mark bit, and store the index for this object in the 2nd pointer of the header, which is rarely used.
 				bo.WritePointer(pointer1 | 1);
@@ -182,7 +199,7 @@ namespace UnityEditor.Profiler.Memory
 					throw new Exception("there was a non0 value in the 2nd pointer of the object header. todo: implement backup scheme");
 				
 				//test writepointer implementation
-				var magic = 0xdeadbeef1234abcd;
+				var magic = 0xdeadbeef;
 				pointer2.WritePointer(magic);
 				var check = pointer2.ReadPointer();
 				if (check != magic)

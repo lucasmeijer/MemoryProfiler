@@ -1,6 +1,7 @@
 ﻿using System;
+using UnityEditor.MemoryProfiler;
 
-namespace UnityEditor.Profiler.Memory
+namespace MemoryProfilerWindow
 {
 	internal struct BytesAndOffset
 	{
@@ -30,10 +31,10 @@ namespace UnityEditor.Profiler.Memory
 
 		public void WritePointer(UInt64 value)
 		{
-			bytes[offset+0] = (byte)(value >> 24);
-			bytes[offset+1] = (byte)(value >> 16);
-			bytes[offset+2] = (byte)(value >> 8);
-			bytes[offset+3] = (byte)(value);
+			bytes[offset+3] = (byte)(value >> 24);
+			bytes[offset+2] = (byte)(value >> 16);
+			bytes[offset+1] = (byte)(value >> 8);
+			bytes[offset+0] = (byte)(value);
 		}
 
 		public BytesAndOffset NextPointer()
