@@ -7,6 +7,7 @@
 *.csproj
 *.unityproj
 *.sln
-*.meta
-*.unity
+*.cs.meta
 *.suo
+*.obj
+*.pdb
