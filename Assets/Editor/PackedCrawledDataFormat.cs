@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text;
 using UnityEditor.MemoryProfiler;
 
@@ -15,8 +15,9 @@ namespace MemoryProfilerWindow
 		public PackedManagedObject[] managedObjects;
 		public PackedStaticFields[] packedStaticFields;
 
-		public int IndexOfFirstGCHandle { get { return nativeObjects.Length; } }
-		public int IndexOfFirstStaticFields { get { return IndexOfFirstGCHandle + gcHandles.Length; } }
+	    public int IndexOfFirstGCHandle { get { return 0; } }
+	    public int IndexOfFirstNativeObject { get { return gcHandles.Length; } }
+	    public int IndexOfFirstStaticFields { get { return IndexOfFirstNativeObject + nativeObjects.Length; } }
 		public int IndexOfFirstManagedObject { get { return IndexOfFirstStaticFields + packedStaticFields.Length; } }
 	}
 

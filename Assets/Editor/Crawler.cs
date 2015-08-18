@@ -53,10 +53,8 @@ namespace MemoryProfilerWindow
 			}
 
 			_result.managedObjects = _managedObjects.ToArray();
+			AddManagedToNativeConnectionsAndRestoreObjectHeaders(_result.managedObjects, _result.nativeObjects);			
 			_result.connections = _connections.ToArray();
-
-			AddManagedToNativeConnectionsAndRestoreObjectHeaders(_result.managedObjects, _result.nativeObjects);
-
 			return _result;
 		}
 
@@ -68,14 +66,14 @@ namespace MemoryProfilerWindow
 			{
 				var managedObjectIndex = i + _result.IndexOfFirstManagedObject;
 				var address = managedObjects[i].address;
-
+				
 				var typeInfoAddress = RestoreObjectHeader(address, managedObjectIndex);
 
 				if (!DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex)) 
 					continue;
 
 				var instanceID = _heaps.Find(address + (UInt64)instanceIDOffset, _virtualMachineInformation).ReadInt32();
-				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceId == instanceID);
+				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceId == instanceID) + _result.IndexOfFirstNativeObject;
 				if (indexOfNativeObject != -1)
 					_connections.Add(new Connection {@from = managedObjectIndex, to = indexOfNativeObject});
 			}

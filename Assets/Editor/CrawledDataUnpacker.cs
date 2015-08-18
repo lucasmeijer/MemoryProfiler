@@ -18,7 +18,7 @@ namespace MemoryProfilerWindow
 				managedHeap = packedSnapshot.managedHeapSections
 			};
 
-			var combined = new ThingInMemory[0].Concat(result.nativeObjects).Concat(result.gcHandles).Concat(result.managedObjects).Concat(result.staticFields).ToArray();
+			var combined = new ThingInMemory[0].Concat(result.gcHandles).Concat(result.nativeObjects).Concat(result.staticFields).Concat(result.managedObjects).ToArray();
 			result.allObjects = combined;
 
 			var referencesLists = MakeTempLists(combined);
