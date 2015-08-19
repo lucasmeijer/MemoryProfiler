@@ -300,7 +300,8 @@ namespace MemoryProfilerWindow
 				return (thing as ManagedObject).typeDescription.name;
 			if (thing is GCHandle)
 				return "GCHandle";
-
+			if (thing is StaticFields)
+				return "static fields of " + (thing as StaticFields).typeDescription.name;
 			return "Undefined";
 		}
 

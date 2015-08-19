@@ -5,7 +5,7 @@ namespace MemoryProfilerWindow
 {
 	static class ManagedHeapExtensions
 	{
-		public static BytesAndOffset Find(this ManagedMemorySection[] heap, UInt64 address,VirtualMachineInformation virtualMachineInformation)
+		public static BytesAndOffset Find(this MemorySection[] heap, UInt64 address,VirtualMachineInformation virtualMachineInformation)
 		{
 			foreach(var segment in heap)
 				if (address >= segment.startAddress && address < (segment.startAddress + (ulong) segment.bytes.Length))
@@ -14,7 +14,7 @@ namespace MemoryProfilerWindow
 			return new BytesAndOffset();
 		}
 
-		public static int ReadArrayLength(this ManagedMemorySection[] heap, UInt64 address, TypeDescription arrayType, VirtualMachineInformation virtualMachineInformation)
+		public static int ReadArrayLength(this MemorySection[] heap, UInt64 address, TypeDescription arrayType, VirtualMachineInformation virtualMachineInformation)
 		{
 			var bo = heap.Find(address, virtualMachineInformation);
 
@@ -25,7 +25,7 @@ namespace MemoryProfilerWindow
 
 			var cursor = heap.Find(bounds, virtualMachineInformation);
 			int length = 0;
-			for (int i = 0; i != arrayType.ArrayRank; i++)
+			for (int i = 0; i != arrayType.arrayRank; i++)
 			{
 				length += cursor.ReadInt32();
 				cursor = cursor.Add(8);

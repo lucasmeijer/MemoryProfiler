@@ -16,7 +16,7 @@ namespace MemoryProfilerWindow
 		//contains concatenation of nativeObjects, gchandles, managedobjects and staticfields
 		public ThingInMemory[] allObjects; 
 
-		public ManagedMemorySection[] managedHeap;
+		public MemorySection[] managedHeap;
 		public TypeDescription[] typeDescriptions;
 		public string[] classIDNames;
 	}

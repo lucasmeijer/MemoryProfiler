@@ -7,7 +7,7 @@ namespace MemoryProfilerWindow
 {
 	internal class Crawler
 	{
-		private ManagedMemorySection[] _heaps;
+		private MemorySection[] _heaps;
 		private List<Connection> _connections;
 		private TypeDescription[] _typeDescriptions;
 		private Dictionary<UInt64, TypeDescription> _typeInfoToTypeDescription;
@@ -24,7 +24,13 @@ namespace MemoryProfilerWindow
 			_typeInfoToTypeDescription = _typeDescriptions.ToDictionary(td => td.typeInfoAddress, td => td);
 			_virtualMachineInformation = input.virtualMachineInformation;
 
-			_result = new PackedCrawledMemorySnapshot
+			_result = new PackedCrawledMemorySnapshot () 
+			{
+				rawSnapshot = input,
+				packedStaticFields = Enumerable.Range(0, input.typeDescriptions.Length).Where(i => input.typeDescriptions[i].staticFieldBytes.Length > 0).Select(i => new PackedStaticFields() {typeIndex = i}).ToArray()
+			};
+
+			/*
 			{
 				managedHeapSections = input.managedHeapSections,
 				nativeObjects = input.nativeObjects,
@@ -33,7 +39,7 @@ namespace MemoryProfilerWindow
 				stacks = input.stacks,
 				typeDescriptions = input.typeDescriptions,
 				packedStaticFields = Enumerable.Range(0, input.typeDescriptions.Length).Where(i => input.typeDescriptions[i].staticFieldBytes.Length > 0).Select(i => new PackedStaticFields() {typeIndex = i}).ToArray()
-			};
+			};*/
 
 
 			_managedObjects = new List<PackedManagedObject>(_result.IndexOfFirstManagedObject * 3);
@@ -43,8 +49,8 @@ namespace MemoryProfilerWindow
 			_connections.AddRange(input.connections);
 		
 			
-			for (int i = 0; i != _result.gcHandles.Length; i++)
-				CrawlPointer(_result.gcHandles[i].target, _result.IndexOfFirstGCHandle + i);
+			for (int i = 0; i != _result.rawSnapshot.gcHandles.Length; i++)
+				CrawlPointer(_result.rawSnapshot.gcHandles[i].target, _result.IndexOfFirstGCHandle + i);
 
 			for (int i = 0; i != _result.packedStaticFields.Length; i++)
 			{
@@ -53,7 +59,7 @@ namespace MemoryProfilerWindow
 			}
 
 			_result.managedObjects = _managedObjects.ToArray();
-			AddManagedToNativeConnectionsAndRestoreObjectHeaders(_result.managedObjects, _result.nativeObjects);			
+			AddManagedToNativeConnectionsAndRestoreObjectHeaders(_result.managedObjects, _result.rawSnapshot.nativeObjects);			
 			_result.connections = _connections.ToArray();
 			return _result;
 		}
@@ -71,7 +77,7 @@ namespace MemoryProfilerWindow
 
 				if (!DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex)) 
 					continue;
-
+				
 				var instanceID = _heaps.Find(address + (UInt64)instanceIDOffset, _virtualMachineInformation).ReadInt32();
 				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceId == instanceID) + _result.IndexOfFirstNativeObject;
 				if (indexOfNativeObject != -1)
@@ -112,7 +118,7 @@ namespace MemoryProfilerWindow
 				if (field.isStatic != useStaticFields)
 					continue;
 
-				if (field.typeIndex == typeDescription.typeIndex && typeDescription.IsValueType) {
+				if (field.typeIndex == typeDescription.typeIndex && typeDescription.isValueType) {
 					//this happens in System.Single, which is a weird type that has a field of its own type.
 					continue;
 				}
@@ -126,7 +132,7 @@ namespace MemoryProfilerWindow
 
 				var fieldLocation = bytesAndOffset.Add(field.offset - (useStaticFields ? 0 : _virtualMachineInformation.objectHeaderSize));
 
-				if (fieldType.IsValueType)
+				if (fieldType.isValueType)
 				{
 					CrawlRawObjectData(fieldLocation, fieldType, false, indexOfFrom);
 					continue;
@@ -154,7 +160,7 @@ namespace MemoryProfilerWindow
 
 			var typeDescription = _typeInfoToTypeDescription[typeInfoAddress];
 
-			if (!typeDescription.IsArray)
+			if (!typeDescription.isArray)
 			{
 				CrawlRawObjectData(bo.Add(_virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject);
 				return;
@@ -165,7 +171,7 @@ namespace MemoryProfilerWindow
 			var cursor = bo.Add(_virtualMachineInformation.arrayHeaderSize);
 			for (int i = 0; i != arrayLength; i++)
 			{
-				if (elementType.IsValueType)
+				if (elementType.isValueType)
 				{
 					CrawlRawObjectData(cursor, elementType, false, indexOfObject);
 					cursor = cursor.Add(elementType.size);
@@ -189,7 +195,7 @@ namespace MemoryProfilerWindow
 				indexOfObject = _managedObjects.Count + _result.IndexOfFirstManagedObject;
 				typeInfoAddress = pointer1;
 				var typeDescription = _typeInfoToTypeDescription [pointer1];
-				var size = typeDescription.IsArray ? 0 : typeDescription.size;
+				var size = typeDescription.isArray ? 0 : typeDescription.size;
 				_managedObjects.Add(new PackedManagedObject() { address = originalHeapAddress, size = size, typeIndex = typeDescription.typeIndex });
 			
 				//okay, we gathered all information, now lets set the mark bit, and store the index for this object in the 2nd pointer of the header, which is rarely used.

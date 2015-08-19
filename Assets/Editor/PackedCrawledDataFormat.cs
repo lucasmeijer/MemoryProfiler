@@ -10,14 +10,18 @@ namespace MemoryProfilerWindow
 
 
 	[Serializable]
-	public class PackedCrawledMemorySnapshot : PackedMemorySnapshot
+	public class PackedCrawledMemorySnapshot 
 	{
+		public PackedMemorySnapshot rawSnapshot;
+
+		public Connection[] connections;
+
 		public PackedManagedObject[] managedObjects;
 		public PackedStaticFields[] packedStaticFields;
 
 	    public int IndexOfFirstGCHandle { get { return 0; } }
-	    public int IndexOfFirstNativeObject { get { return gcHandles.Length; } }
-	    public int IndexOfFirstStaticFields { get { return IndexOfFirstNativeObject + nativeObjects.Length; } }
+	    public int IndexOfFirstNativeObject { get { return rawSnapshot.gcHandles.Length; } }
+		public int IndexOfFirstStaticFields { get { return IndexOfFirstNativeObject + rawSnapshot.nativeObjects.Length; } }
 		public int IndexOfFirstManagedObject { get { return IndexOfFirstStaticFields + packedStaticFields.Length; } }
 	}
 

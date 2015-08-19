@@ -10,12 +10,12 @@ namespace MemoryProfilerWindow
 		{
 			var result = new CrawledMemorySnapshot
 			{
-				nativeObjects = packedSnapshot.nativeObjects.Select(packedNativeUnityEngineObject => UnpackNativeUnityEngineObject(packedSnapshot, packedNativeUnityEngineObject)).ToArray(),
+				nativeObjects = packedSnapshot.rawSnapshot.nativeObjects.Select(packedNativeUnityEngineObject => UnpackNativeUnityEngineObject(packedSnapshot, packedNativeUnityEngineObject)).ToArray(),
 				managedObjects = packedSnapshot.managedObjects.Select(pm => UnpackManagedObject(packedSnapshot, pm)).ToArray(),
-				gcHandles = packedSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot, pgc)).ToArray(),
+				gcHandles = packedSnapshot.rawSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot, pgc)).ToArray(),
 				staticFields = packedSnapshot.packedStaticFields.Select(psf => UnpackStaticFields(packedSnapshot, psf)).ToArray(),
-				typeDescriptions = packedSnapshot.typeDescriptions,
-				managedHeap = packedSnapshot.managedHeapSections
+				typeDescriptions = packedSnapshot.rawSnapshot.typeDescriptions,
+				managedHeap = packedSnapshot.rawSnapshot.managedHeapSections
 			};
 
 			var combined = new ThingInMemory[0].Concat(result.gcHandles).Concat(result.nativeObjects).Concat(result.staticFields).Concat(result.managedObjects).ToArray();
@@ -49,7 +49,7 @@ namespace MemoryProfilerWindow
 
 		static StaticFields UnpackStaticFields(PackedCrawledMemorySnapshot packedSnapshot, PackedStaticFields psf)
 		{
-			var typeDescription = packedSnapshot.typeDescriptions[psf.typeIndex];
+			var typeDescription = packedSnapshot.rawSnapshot.typeDescriptions[psf.typeIndex];
 			return new StaticFields()
 			{
 				typeDescription = typeDescription,
@@ -60,12 +60,12 @@ namespace MemoryProfilerWindow
 
 		static GCHandle UnpackGCHandle(PackedCrawledMemorySnapshot packedSnapshot, PackedGCHandle pgc)
 		{
-			return new GCHandle() { size = packedSnapshot.virtualMachineInformation.pointerSize, caption = "gchandle" };
+			return new GCHandle() { size = packedSnapshot.rawSnapshot.virtualMachineInformation.pointerSize, caption = "gchandle" };
 		}
 
 		static ManagedObject UnpackManagedObject(PackedCrawledMemorySnapshot packedCrawledMemorySnapshot, PackedManagedObject pm)
 		{
-			var typeDescription = packedCrawledMemorySnapshot.typeDescriptions[pm.typeIndex];
+			var typeDescription = packedCrawledMemorySnapshot.rawSnapshot.typeDescriptions[pm.typeIndex];
 			return new ManagedObject() { address = pm.address, size = pm.size, typeDescription = typeDescription, caption = typeDescription.name };
 		}
 
@@ -75,7 +75,7 @@ namespace MemoryProfilerWindow
 			{
 				instanceID = packedNativeUnityEngineObject.instanceId,
 				classID = packedNativeUnityEngineObject.classId,
-				className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name,
+				className = packedSnapshot.rawSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name,
 				name = packedNativeUnityEngineObject.name,
 				caption = packedNativeUnityEngineObject.name + "(className)",
 				size = packedNativeUnityEngineObject.size
