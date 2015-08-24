@@ -6,16 +6,18 @@ namespace MemoryProfilerWindow
 {
 	class CrawlDataUnpacker
 	{
-		public static CrawledMemorySnapshot Unpack(PackedCrawledMemorySnapshot packedSnapshot)
+		public static CrawledMemorySnapshot Unpack(PackedCrawlerData packedCrawlerData)
 		{
+		    var packedSnapshot = packedCrawlerData.packedMemorySnapshot;
+
 			var result = new CrawledMemorySnapshot
 			{
-				nativeObjects = packedSnapshot.rawSnapshot.nativeObjects.Select(packedNativeUnityEngineObject => UnpackNativeUnityEngineObject(packedSnapshot, packedNativeUnityEngineObject)).ToArray(),
-				managedObjects = packedSnapshot.managedObjects.Select(pm => UnpackManagedObject(packedSnapshot, pm)).ToArray(),
-				gcHandles = packedSnapshot.rawSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot, pgc)).ToArray(),
-				staticFields = packedSnapshot.packedStaticFields.Select(psf => UnpackStaticFields(packedSnapshot, psf)).ToArray(),
-				typeDescriptions = packedSnapshot.rawSnapshot.typeDescriptions,
-				managedHeap = packedSnapshot.rawSnapshot.managedHeapSections
+				nativeObjects = packedSnapshot.nativeObjects.Select(packedNativeUnityEngineObject => UnpackNativeUnityEngineObject(packedSnapshot, packedNativeUnityEngineObject)).ToArray(),
+				managedObjects = packedCrawlerData.managedObjects.Select(pm => UnpackManagedObject(packedSnapshot, pm)).ToArray(),
+				gcHandles = packedSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot)).ToArray(),
+				staticFields = packedSnapshot.typeDescriptions.Where(t=>t.staticFieldBytes != null & t.staticFieldBytes.Length > 0).Select(t => UnpackStaticFields(t)).ToArray(),
+				typeDescriptions = packedSnapshot.typeDescriptions,
+				managedHeap = packedSnapshot.managedHeapSections
 			};
 
 			var combined = new ThingInMemory[0].Concat(result.gcHandles).Concat(result.nativeObjects).Concat(result.staticFields).Concat(result.managedObjects).ToArray();
@@ -47,9 +49,8 @@ namespace MemoryProfilerWindow
 			return referencesLists;
 		}
 
-		static StaticFields UnpackStaticFields(PackedCrawledMemorySnapshot packedSnapshot, PackedStaticFields psf)
+		static StaticFields UnpackStaticFields(TypeDescription typeDescription)
 		{
-			var typeDescription = packedSnapshot.rawSnapshot.typeDescriptions[psf.typeIndex];
 			return new StaticFields()
 			{
 				typeDescription = typeDescription,
@@ -58,28 +59,64 @@ namespace MemoryProfilerWindow
 			};
 		}
 
-		static GCHandle UnpackGCHandle(PackedCrawledMemorySnapshot packedSnapshot, PackedGCHandle pgc)
+		static GCHandle UnpackGCHandle(PackedMemorySnapshot packedSnapshot)
 		{
-			return new GCHandle() { size = packedSnapshot.rawSnapshot.virtualMachineInformation.pointerSize, caption = "gchandle" };
+			return new GCHandle() { size = packedSnapshot.virtualMachineInformation.pointerSize, caption = "gchandle" };
 		}
 
-		static ManagedObject UnpackManagedObject(PackedCrawledMemorySnapshot packedCrawledMemorySnapshot, PackedManagedObject pm)
+		static ManagedObject UnpackManagedObject(PackedMemorySnapshot packedSnapshot, PackedManagedObject pm)
 		{
-			var typeDescription = packedCrawledMemorySnapshot.rawSnapshot.typeDescriptions[pm.typeIndex];
+			var typeDescription = packedSnapshot.typeDescriptions[pm.typeIndex];
 			return new ManagedObject() { address = pm.address, size = pm.size, typeDescription = typeDescription, caption = typeDescription.name };
 		}
 
-		static NativeUnityEngineObject UnpackNativeUnityEngineObject(PackedCrawledMemorySnapshot packedSnapshot, PackedNativeUnityEngineObject packedNativeUnityEngineObject)
+		static NativeUnityEngineObject UnpackNativeUnityEngineObject(PackedMemorySnapshot packedSnapshot, PackedNativeUnityEngineObject packedNativeUnityEngineObject)
 		{
 			return new NativeUnityEngineObject()
 			{
 				instanceID = packedNativeUnityEngineObject.instanceId,
 				classID = packedNativeUnityEngineObject.classId,
-				className = packedSnapshot.rawSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name,
+				className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name,
 				name = packedNativeUnityEngineObject.name,
 				caption = packedNativeUnityEngineObject.name + "(className)",
 				size = packedNativeUnityEngineObject.size
 			};
 		}
 	}
+
+    internal class PackedCrawlerData
+    {
+        public PackedMemorySnapshot packedMemorySnapshot;
+
+        public StartIndices startIndices;
+        public PackedManagedObject[] managedObjects;
+        public TypeDescription[] typesWithStaticFields;
+        public Connection[] connections;
+
+        public PackedCrawlerData(PackedMemorySnapshot packedMemorySnapshot)
+        {
+            this.packedMemorySnapshot = packedMemorySnapshot;
+            typesWithStaticFields = packedMemorySnapshot.typeDescriptions.Where(t => t.staticFieldBytes != null && t.staticFieldBytes.Length > 0).ToArray();
+            startIndices = new StartIndices(this.packedMemorySnapshot.gcHandles.Length, this.packedMemorySnapshot.nativeObjects.Length, typesWithStaticFields.Length);
+        }
+    }
+
+    internal class StartIndices
+    {
+        private readonly int _gcHandleCount;
+        private readonly int _nativeObjectCount;
+        private readonly int _staticFieldsCount;
+
+        public StartIndices(int gcHandleCount, int nativeObjectCount, int staticFieldsCount)
+        {
+            _gcHandleCount = gcHandleCount;
+            _nativeObjectCount = nativeObjectCount;
+            _staticFieldsCount = staticFieldsCount;
+        }
+
+        public int OfFirstGCHandle { get { return 0; } }
+        public int OfFirstNativeObject { get { return OfFirstGCHandle + _gcHandleCount; } }
+        public int OfFirstStaticFields { get { return OfFirstNativeObject + _nativeObjectCount; } }
+        public int OfFirstManagedObject { get { return OfFirstStaticFields + _staticFieldsCount;  } }
+    }
 }

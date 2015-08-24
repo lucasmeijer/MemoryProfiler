@@ -14,8 +14,7 @@ namespace MemoryProfilerWindow
 	{		
 		[NonSerialized]
 		UnityEditor.MemoryProfiler.PackedMemorySnapshot _snapshot;
-		[NonSerialized]
-		PackedCrawledMemorySnapshot _packedCrawled;
+
 		[NonSerialized]
 		CrawledMemorySnapshot _unpackedCrawl;
 
@@ -76,7 +75,7 @@ namespace MemoryProfilerWindow
 			}
 
 			Rect r = new Rect(0f, 25f, position.width, position.height - 25f);
-
+        
 			_ZoomableArea.rect = r;
 			_ZoomableArea.BeginViewGUI();
 
@@ -117,9 +116,9 @@ namespace MemoryProfilerWindow
 			_snapshot = snapshot;
 
 			var crawler = new Crawler ();
-			_packedCrawled = crawler.Crawl (_snapshot);
+			PackedCrawlerData packedCrawled = crawler.Crawl (_snapshot);
 
-			_unpackedCrawl = CrawlDataUnpacker.Unpack (_packedCrawled);
+			_unpackedCrawl = CrawlDataUnpacker.Unpack (packedCrawled);
 			RefreshCaches();
 		}
 
@@ -301,8 +300,8 @@ namespace MemoryProfilerWindow
 			if (thing is GCHandle)
 				return "GCHandle";
 			if (thing is StaticFields)
-				return "static fields of " + (thing as StaticFields).typeDescription.name;
-			return "Undefined";
+				return "static fields";
+            throw new ArgumentException("Unknown ThingInMemory: "+thing.GetType());
 		}
 
 	}

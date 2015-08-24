@@ -7,99 +7,76 @@ namespace MemoryProfilerWindow
 {
 	internal class Crawler
 	{
-		private MemorySection[] _heaps;
-		private List<Connection> _connections;
-		private TypeDescription[] _typeDescriptions;
 		private Dictionary<UInt64, TypeDescription> _typeInfoToTypeDescription;
-
-		private List<PackedManagedObject> _managedObjects;
+        
 		private Dictionary<int, UInt64> _pointer2Backups = new Dictionary<int, ulong>();
 		private VirtualMachineInformation _virtualMachineInformation;
-		PackedCrawledMemorySnapshot _result;
-
-		public PackedCrawledMemorySnapshot Crawl(PackedMemorySnapshot input)
+	
+		public PackedCrawlerData Crawl(PackedMemorySnapshot input)
 		{
-			_heaps = input.managedHeapSections;
-			_typeDescriptions = input.typeDescriptions;
-			_typeInfoToTypeDescription = _typeDescriptions.ToDictionary(td => td.typeInfoAddress, td => td);
+			_typeInfoToTypeDescription = input.typeDescriptions.ToDictionary(td => td.typeInfoAddress, td => td);
 			_virtualMachineInformation = input.virtualMachineInformation;
 
-			_result = new PackedCrawledMemorySnapshot () 
-			{
-				rawSnapshot = input,
-				packedStaticFields = Enumerable.Range(0, input.typeDescriptions.Length).Where(i => input.typeDescriptions[i].staticFieldBytes.Length > 0).Select(i => new PackedStaticFields() {typeIndex = i}).ToArray()
-			};
+		    var result = new PackedCrawlerData(input);
+            
+			var managedObjects = new List<PackedManagedObject>(result.startIndices.OfFirstManagedObject * 3);
 
-			/*
-			{
-				managedHeapSections = input.managedHeapSections,
-				nativeObjects = input.nativeObjects,
-				gcHandles = input.gcHandles,
-				nativeTypes = input.nativeTypes,
-				stacks = input.stacks,
-				typeDescriptions = input.typeDescriptions,
-				packedStaticFields = Enumerable.Range(0, input.typeDescriptions.Length).Where(i => input.typeDescriptions[i].staticFieldBytes.Length > 0).Select(i => new PackedStaticFields() {typeIndex = i}).ToArray()
-			};*/
-
-
-			_managedObjects = new List<PackedManagedObject>(_result.IndexOfFirstManagedObject * 3);
-
-			_connections = new List<Connection>(_managedObjects.Count * 3);
+			var connections = new List<Connection>(managedObjects.Count * 3);
 			//we will be adding a lot of connections, but the input format also already had connections. (nativeobject->nativeobject and nativeobject->gchandle). we'll add ours to the ones already there.
-			_connections.AddRange(input.connections);
+			connections.AddRange(input.connections);
 		
-			
-			for (int i = 0; i != _result.rawSnapshot.gcHandles.Length; i++)
-				CrawlPointer(_result.rawSnapshot.gcHandles[i].target, _result.IndexOfFirstGCHandle + i);
+			for (int i = 0; i != input.gcHandles.Length; i++)
+				CrawlPointer(input, result.startIndices, input.gcHandles[i].target, result.startIndices.OfFirstGCHandle + i, connections, managedObjects);
 
-			for (int i = 0; i != _result.packedStaticFields.Length; i++)
-			{
-				var typeDescription = input.typeDescriptions[_result.packedStaticFields[i].typeIndex];
-				CrawlRawObjectData(new BytesAndOffset {bytes = typeDescription.staticFieldBytes, offset = 0, pointerSize = _virtualMachineInformation.pointerSize}, typeDescription, true, _result.IndexOfFirstStaticFields + i);
-			}
+		    for (int i = 0; i < result.typesWithStaticFields.Length; i++)
+		    {
+		        var typeDescription = result.typesWithStaticFields[i];
+		        CrawlRawObjectData(input, result.startIndices, new BytesAndOffset {bytes = typeDescription.staticFieldBytes, offset = 0, pointerSize = _virtualMachineInformation.pointerSize}, typeDescription, true, result.startIndices.OfFirstStaticFields + i, connections, managedObjects);
+		    }
 
-			_result.managedObjects = _managedObjects.ToArray();
-			AddManagedToNativeConnectionsAndRestoreObjectHeaders(_result.managedObjects, _result.rawSnapshot.nativeObjects);			
-			_result.connections = _connections.ToArray();
-			return _result;
+		    result.managedObjects = managedObjects.ToArray();
+		    connections.AddRange(AddManagedToNativeConnectionsAndRestoreObjectHeaders(input, result.startIndices, result));
+		    result.connections = connections.ToArray();
+
+		    return result;
 		}
 
-		private void AddManagedToNativeConnectionsAndRestoreObjectHeaders(PackedManagedObject[] managedObjects, PackedNativeUnityEngineObject[] nativeObjects)
+		private IEnumerable<Connection> AddManagedToNativeConnectionsAndRestoreObjectHeaders(PackedMemorySnapshot packedMemorySnapshot, StartIndices startIndices, PackedCrawlerData packedCrawlerData)
 		{
-			var unityEngineObjectTypeDescription = _typeDescriptions.First(td => td.name == "UnityEngine.Object");
+			var unityEngineObjectTypeDescription = packedMemorySnapshot.typeDescriptions.First(td => td.name == "UnityEngine.Object");
 			var instanceIDOffset = unityEngineObjectTypeDescription.fields.Single(f => f.name == "m_InstanceID").offset;
-			for (int i = 0; i != managedObjects.Length; i++)
+			for (int i = 0; i != packedCrawlerData.managedObjects.Length; i++)
 			{
-				var managedObjectIndex = i + _result.IndexOfFirstManagedObject;
-				var address = managedObjects[i].address;
+				var managedObjectIndex = i + startIndices.OfFirstManagedObject;
+				var address = packedCrawlerData.managedObjects[i].address;
 				
-				var typeInfoAddress = RestoreObjectHeader(address, managedObjectIndex);
+				var typeInfoAddress = RestoreObjectHeader(packedMemorySnapshot.managedHeapSections, address, managedObjectIndex);
 
-				if (!DerivesFrom(_typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex)) 
+				if (!DerivesFrom(packedMemorySnapshot.typeDescriptions, _typeInfoToTypeDescription[typeInfoAddress].typeIndex, unityEngineObjectTypeDescription.typeIndex)) 
 					continue;
 				
-				var instanceID = _heaps.Find(address + (UInt64)instanceIDOffset, _virtualMachineInformation).ReadInt32();
-				var indexOfNativeObject = Array.FindIndex(nativeObjects, no => no.instanceId == instanceID) + _result.IndexOfFirstNativeObject;
+				var instanceID = packedMemorySnapshot.managedHeapSections.Find(address + (UInt64)instanceIDOffset, packedMemorySnapshot.virtualMachineInformation).ReadInt32();
+				var indexOfNativeObject = Array.FindIndex(packedMemorySnapshot.nativeObjects, no => no.instanceId == instanceID) + startIndices.OfFirstNativeObject;
 				if (indexOfNativeObject != -1)
-					_connections.Add(new Connection {@from = managedObjectIndex, to = indexOfNativeObject});
+					yield return new Connection {@from = managedObjectIndex, to = indexOfNativeObject};
 			}
 		}
 
-		private bool DerivesFrom(int typeIndex, int potentialBase)
+		private bool DerivesFrom(TypeDescription[] typeDescriptions, int typeIndex, int potentialBase)
 		{
 			if (typeIndex == potentialBase)
 				return true;
-			var baseIndex = _typeDescriptions[typeIndex].baseOrElementTypeIndex;
+			var baseIndex = typeDescriptions[typeIndex].baseOrElementTypeIndex;
 
 			if (baseIndex == -1)
 				return false;
 			
-			return DerivesFrom(baseIndex, potentialBase);
+			return DerivesFrom(typeDescriptions,baseIndex, potentialBase);
 		}
 
-		private ulong RestoreObjectHeader(ulong address, int managedObjectIndex)
+		private ulong RestoreObjectHeader(MemorySection[] heaps, ulong address, int managedObjectIndex)
 		{
-			var bo = _heaps.Find(address, _virtualMachineInformation);
+			var bo = heaps.Find(address, _virtualMachineInformation);
 			var mask = this._virtualMachineInformation.pointerSize == 8 ? System.UInt64.MaxValue - 1 : System.UInt32.MaxValue - 1;
 			var pointer = bo.ReadPointer ();
 			var typeInfoAddress = pointer & mask;
@@ -111,7 +88,7 @@ namespace MemoryProfilerWindow
 			return typeInfoAddress;
 		}
 
-		private void CrawlRawObjectData(BytesAndOffset bytesAndOffset, TypeDescription typeDescription, bool useStaticFields, int indexOfFrom)
+		private void CrawlRawObjectData(PackedMemorySnapshot packedMemorySnapshot, StartIndices startIndices, BytesAndOffset bytesAndOffset, TypeDescription typeDescription, bool useStaticFields, int indexOfFrom, List<Connection>  out_connections, List<PackedManagedObject> out_managedObjects)
 		{
 			foreach (var field in typeDescription.fields)
 			{
@@ -128,32 +105,32 @@ namespace MemoryProfilerWindow
 					continue;
 				}
 
-				var fieldType = _typeDescriptions[field.typeIndex];
+				var fieldType = packedMemorySnapshot.typeDescriptions[field.typeIndex];
 
 				var fieldLocation = bytesAndOffset.Add(field.offset - (useStaticFields ? 0 : _virtualMachineInformation.objectHeaderSize));
 
 				if (fieldType.isValueType)
 				{
-					CrawlRawObjectData(fieldLocation, fieldType, false, indexOfFrom);
+					CrawlRawObjectData(packedMemorySnapshot, startIndices, fieldLocation, fieldType, false, indexOfFrom, out_connections, out_managedObjects);
 					continue;
 				}
 
-				CrawlPointer(fieldLocation.ReadPointer(), indexOfFrom);
+				CrawlPointer(packedMemorySnapshot, startIndices, fieldLocation.ReadPointer(), indexOfFrom, out_connections, out_managedObjects);
 			}
 		}
 
-		private void CrawlPointer(UInt64 pointer, int indexOfFrom)
+		private void CrawlPointer(PackedMemorySnapshot packedMemorySnapshot, StartIndices startIndices, ulong pointer, int indexOfFrom, List<Connection> out_connections, List<PackedManagedObject> out_managedObjects)
 		{
-			var bo = _heaps.Find(pointer, _virtualMachineInformation);
+			var bo = packedMemorySnapshot.managedHeapSections.Find(pointer, _virtualMachineInformation);
 			if (!bo.IsValid)
 				return;
 
 			UInt64 typeInfoAddress;
 			int indexOfObject;
 			bool wasAlreadyCrawled;
-			ParseObjectHeader(bo, pointer, out typeInfoAddress, out indexOfObject, out wasAlreadyCrawled);
+			ParseObjectHeader(startIndices, bo, pointer, out typeInfoAddress, out indexOfObject, out wasAlreadyCrawled, out_managedObjects);
 
-			_connections.Add(new Connection() {from = indexOfFrom, to = indexOfObject});
+            out_connections.Add(new Connection() {from = indexOfFrom, to = indexOfObject});
 
 			if (wasAlreadyCrawled)
 				return;
@@ -162,29 +139,29 @@ namespace MemoryProfilerWindow
 
 			if (!typeDescription.isArray)
 			{
-				CrawlRawObjectData(bo.Add(_virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject);
+				CrawlRawObjectData(packedMemorySnapshot, startIndices, bo.Add(_virtualMachineInformation.objectHeaderSize), typeDescription, false, indexOfObject, out_connections, out_managedObjects);
 				return;
 			}
 
-			var arrayLength = _heaps.ReadArrayLength(pointer, typeDescription,_virtualMachineInformation);
-			var elementType = _typeDescriptions[typeDescription.baseOrElementTypeIndex];
+			var arrayLength = packedMemorySnapshot.managedHeapSections.ReadArrayLength(pointer, typeDescription,_virtualMachineInformation);
+			var elementType = packedMemorySnapshot.typeDescriptions[typeDescription.baseOrElementTypeIndex];
 			var cursor = bo.Add(_virtualMachineInformation.arrayHeaderSize);
 			for (int i = 0; i != arrayLength; i++)
 			{
 				if (elementType.isValueType)
 				{
-					CrawlRawObjectData(cursor, elementType, false, indexOfObject);
+					CrawlRawObjectData(packedMemorySnapshot, startIndices, cursor, elementType, false, indexOfObject, out_connections, out_managedObjects);
 					cursor = cursor.Add(elementType.size);
 				}
 				else
 				{
-					CrawlPointer(cursor.ReadPointer(), indexOfObject);
+				    CrawlPointer(packedMemorySnapshot, startIndices, cursor.ReadPointer(), indexOfObject, out_connections, out_managedObjects);
 					cursor = cursor.NextPointer();
 				}
 			}
 		}
 
-		private void ParseObjectHeader(BytesAndOffset bo, UInt64 originalHeapAddress, out ulong typeInfoAddress, out int indexOfObject, out bool wasAlreadyCrawled)
+		private void ParseObjectHeader(StartIndices startIndices, BytesAndOffset bo, ulong originalHeapAddress, out ulong typeInfoAddress, out int indexOfObject, out bool wasAlreadyCrawled, List<PackedManagedObject> outManagedObjects)
 		{
 			var pointer1 = bo.ReadPointer();
 			var pointer2 = bo.NextPointer();
@@ -192,11 +169,11 @@ namespace MemoryProfilerWindow
 			if (HasMarkBit(pointer1) == 0)
 			{
 				wasAlreadyCrawled = false;
-				indexOfObject = _managedObjects.Count + _result.IndexOfFirstManagedObject;
+				indexOfObject = outManagedObjects.Count + startIndices.OfFirstManagedObject;
 				typeInfoAddress = pointer1;
 				var typeDescription = _typeInfoToTypeDescription [pointer1];
 				var size = typeDescription.isArray ? 0 : typeDescription.size;
-				_managedObjects.Add(new PackedManagedObject() { address = originalHeapAddress, size = size, typeIndex = typeDescription.typeIndex });
+                outManagedObjects.Add(new PackedManagedObject() { address = originalHeapAddress, size = size, typeIndex = typeDescription.typeIndex });
 			
 				//okay, we gathered all information, now lets set the mark bit, and store the index for this object in the 2nd pointer of the header, which is rarely used.
 				bo.WritePointer(pointer1 | 1);
@@ -204,7 +181,7 @@ namespace MemoryProfilerWindow
 				var oldValue = pointer2.ReadPointer();
 				if (oldValue != 0)
 					throw new Exception("there was a non0 value in the 2nd pointer of the object header. todo: implement backup scheme");
-				
+			
 				//test writepointer implementation
 				var magic = 0xdeadbeef;
 				pointer2.WritePointer(magic);
