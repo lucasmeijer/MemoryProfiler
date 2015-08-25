@@ -6,6 +6,7 @@ using Treemap;
 using UnityEditor;
 using UnityEngine;
 using System;
+using Assets.MemoryProfiler.Assets.Editor;
 using Object = UnityEngine.Object;
 
 namespace MemoryProfilerWindow
@@ -23,9 +24,14 @@ namespace MemoryProfilerWindow
 		private Dictionary<string, Group> _groups;
 		private List<Item> _items;
 		private List<Mesh> _cachedMeshes;
+        [NonSerialized]
 		private bool _registered = false;
-			
-		[MenuItem("Window/MemoryProfiler")]
+	    private Item _selectedItem;
+	    private ThingInMemory[] _shortestPath;
+	    private static int s_InspectorWidth = 400;
+	    private ShortestPathToRootFinder _shortestPathToRootFinder;
+
+	    [MenuItem("Window/MemoryProfiler")]
 		static void Create()
 		{
 			EditorWindow.GetWindow<MemoryProfilerWindow> ();
@@ -33,7 +39,7 @@ namespace MemoryProfilerWindow
 
 		public void OnDisable()
 		{
-			UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived -= IncomingSnapshot;
+		//	UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived -= IncomingSnapshot;
 		}
 
 		public void Initialize()
@@ -53,16 +59,18 @@ namespace MemoryProfilerWindow
 			}
 			if (_ZoomableArea == null)
 			{
-				_ZoomableArea = new ZoomableArea(true);
-				_ZoomableArea.vRangeMin = -110f;
-				_ZoomableArea.vRangeMax = 110f;
-				_ZoomableArea.hRangeMin = -110f;
-				_ZoomableArea.hRangeMax = 110f;
-				_ZoomableArea.hBaseRangeMin = -110f;
-				_ZoomableArea.vBaseRangeMin = -110f;
-				_ZoomableArea.hBaseRangeMax = 110f;
-				_ZoomableArea.vBaseRangeMax = 110f;
-				_ZoomableArea.shownArea = new Rect(-110f, -110f, 220f, 220f);
+			    _ZoomableArea = new ZoomableArea(true)
+			    {
+			        vRangeMin = -110f,
+			        vRangeMax = 110f,
+			        hRangeMin = -110f,
+			        hRangeMax = 110f,
+			        hBaseRangeMin = -110f,
+			        vBaseRangeMin = -110f,
+			        hBaseRangeMax = 110f,
+			        vBaseRangeMax = 110f,
+			        shownArea = new Rect(-110f, -110f, 220f, 220f)
+			    };
 			}
 		}
 
@@ -74,9 +82,26 @@ namespace MemoryProfilerWindow
 				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot ();
 			}
 
-			Rect r = new Rect(0f, 25f, position.width, position.height - 25f);
-        
-			_ZoomableArea.rect = r;
+
+
+		    if (Event.current.type == EventType.MouseUp)
+		    {
+		        var mousepos = Event.current.mousePosition;
+		        mousepos.y -= 25;
+		        var pos = _ZoomableArea.ViewToDrawingTransformPoint(mousepos);
+		        //pos.y = 25;
+		        var firstOrDefault = _items.FirstOrDefault(i => i._position.Contains(pos));
+		        if (firstOrDefault != null)
+		        {
+		            Select(firstOrDefault);
+		            Event.current.Use();
+		            return;
+		        }
+		    }
+
+		    Rect r = new Rect(0f, 25f, position.width-s_InspectorWidth, position.height - 25f);
+
+            _ZoomableArea.rect = r;
 			_ZoomableArea.BeginViewGUI();
 
 			GUI.BeginGroup(r);
@@ -86,10 +111,126 @@ namespace MemoryProfilerWindow
 
 			_ZoomableArea.EndViewGUI();
 			Repaint();
+
+		    DrawInspector();
+            
 			//RenderDebugList();
 		}
 
-		private void RenderDebugList()
+	    private void Select(Item item)
+	    {
+	        _selectedItem = item;
+	        RefreshMesh();
+            
+	        _shortestPath = _shortestPathToRootFinder.FindFor(item._thingInMemory);
+	    }
+
+	    private void DrawInspector()
+	    {
+	        GUILayout.BeginArea(new Rect(position.width - s_InspectorWidth, 25, s_InspectorWidth, position.height - 25f));
+
+	        if (_selectedItem == null)
+	            GUILayout.Label("Select an object to see more info");
+	        else
+	        {
+
+	            var thing = _selectedItem._thingInMemory;
+	            var nativeObject = thing as NativeUnityEngineObject;
+	            if (nativeObject != null)
+	            {
+                    GUILayout.Label("NativeUnityEngineObject");
+                    GUILayout.Label("Name: "+nativeObject.name);
+                    GUILayout.Label("ClassName: "+nativeObject.className);
+                    GUILayout.Label("ClassID: "+nativeObject.classID);
+                    GUILayout.Label("instanceID: "+nativeObject.instanceID);
+                    GUILayout.Label("isDontDestroyOnLoad:"+nativeObject.isDontDestroyOnLoad);
+                    GUILayout.Label("isPersistent:" + nativeObject.isPersistent);
+                    GUILayout.Label("isManager:" + nativeObject.isManager);
+                    GUILayout.Label("hideFlags: "+nativeObject.hideFlags);
+                }
+
+                var managedObject = thing as ManagedObject;
+	            if (managedObject != null)
+	            {
+                    GUILayout.Label("ManagedObject");
+                    GUILayout.Label("Type: " + managedObject.typeDescription.name);
+                    GUILayout.Label("Address: " + managedObject.address);
+                }
+
+	            if (thing is GCHandle)
+	            {
+	                GUILayout.Label("GCHandle");
+	            }
+
+	            var staticFields = thing as StaticFields;
+	            if (staticFields != null)
+	            {
+	                GUILayout.Label("Static Fields");
+                    GUILayout.Label("Of type: "+ staticFields.typeDescription.name);
+	            }
+
+                GUILayout.Space(10);
+
+                GUILayout.Label("Referenced by:");
+   	            DrawLinks(thing.referencedBy);
+
+	            GUILayout.Space(10);
+                GUILayout.Label("References:");
+	            DrawLinks(thing.references);
+
+	            GUILayout.Space(10);
+	            if (_shortestPath != null)
+	            {
+	                if (_shortestPath.Length > 1)
+	                {
+	                    GUILayout.Label("ShortestPathToRoot");
+	                    DrawLinks(_shortestPath);
+	                }
+	                string reason;
+	                _shortestPathToRootFinder.IsRoot(_shortestPath.Last(), out reason);
+                    GUILayout.Label("This is a root because:");
+                    GUILayout.TextArea(reason);
+	            }
+	            else
+	            {
+	                GUILayout.TextArea("No root is keeping this object alive. It will be collected next UnloadUnusedAssets() or scene load");
+	            }
+
+	        }
+            GUILayout.EndArea();
+	    }
+
+	    private void DrawLinks(ThingInMemory[] thingInMemories)
+	    {
+	        var c = GUI.backgroundColor;
+	        foreach (var rb in thingInMemories)
+	        {
+               EditorGUI.BeginDisabledGroup(rb == _selectedItem._thingInMemory);
+
+	            GUI.backgroundColor = ColorFor(rb);
+
+                if (GUILayout.Button(rb.caption))
+	                Select(_items.First(i => i._thingInMemory == rb));
+               EditorGUI.EndDisabledGroup();
+	        }
+	        GUI.backgroundColor = c;
+	    }
+
+	    private Color ColorFor(ThingInMemory rb)
+	    {
+	        if (rb is NativeUnityEngineObject)
+	            return Color.red;
+            if (rb is ManagedObject)
+	            return Color.Lerp(Color.blue, Color.white, 0.5f);
+	        if (rb is GCHandle)
+	            return Color.magenta;
+	        if (rb is StaticFields)
+	            return Color.yellow;
+
+            throw new ArgumentException("Unexpected type: "+rb.GetType());
+	    }
+
+	    private void RenderDebugList()
 		{
 			_scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
 
@@ -120,7 +261,8 @@ namespace MemoryProfilerWindow
 
 			_unpackedCrawl = CrawlDataUnpacker.Unpack (packedCrawled);
 			RefreshCaches();
-		}
+            _shortestPathToRootFinder = new ShortestPathToRootFinder(_unpackedCrawl);
+        }
 
 		void RefreshCaches()
 		{
@@ -212,10 +354,14 @@ namespace MemoryProfilerWindow
 				vertices[index++] = new Vector3(item._position.xMin, item._position.yMax, 0f);
 
 				index = itemIndex * 4;
-				colors[index++] = item.color;
-				colors[index++] = item.color * 0.75f;
-				colors[index++] = item.color * 0.5f;
-				colors[index++] = item.color * 0.75f;
+			    var color = item.color;
+			    if (item == _selectedItem)
+			        color *= 1.5f;
+
+                colors[index++] = color;
+				colors[index++] = color * 0.75f;
+				colors[index++] = color * 0.5f;
+				colors[index++] = color * 0.75f;
 
 				index = itemIndex * 6;
 				triangles[index++] = itemIndex * 4 + 0;

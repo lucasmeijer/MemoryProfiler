@@ -17,7 +17,8 @@ namespace MemoryProfilerWindow
 				gcHandles = packedSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot)).ToArray(),
 				staticFields = packedSnapshot.typeDescriptions.Where(t=>t.staticFieldBytes != null & t.staticFieldBytes.Length > 0).Select(t => UnpackStaticFields(t)).ToArray(),
 				typeDescriptions = packedSnapshot.typeDescriptions,
-				managedHeap = packedSnapshot.managedHeapSections
+				managedHeap = packedSnapshot.managedHeapSections,
+                nativeTypes = packedSnapshot.nativeTypes
 			};
 
 			var combined = new ThingInMemory[0].Concat(result.gcHandles).Concat(result.nativeObjects).Concat(result.staticFields).Concat(result.managedObjects).ToArray();
@@ -26,7 +27,7 @@ namespace MemoryProfilerWindow
 			var referencesLists = MakeTempLists(combined);
 			var referencedByLists = MakeTempLists(combined);
 
-			foreach (var connection in packedSnapshot.connections)
+			foreach (var connection in packedCrawlerData.connections)
 			{
 				referencesLists[connection.@from].Add(combined[connection.to]);
 				referencedByLists[connection.to].Add(combined[connection.@from]);
@@ -72,14 +73,20 @@ namespace MemoryProfilerWindow
 
 		static NativeUnityEngineObject UnpackNativeUnityEngineObject(PackedMemorySnapshot packedSnapshot, PackedNativeUnityEngineObject packedNativeUnityEngineObject)
 		{
-			return new NativeUnityEngineObject()
+		    var className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name;
+
+            return new NativeUnityEngineObject()
 			{
 				instanceID = packedNativeUnityEngineObject.instanceId,
 				classID = packedNativeUnityEngineObject.classId,
-				className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name,
-				name = packedNativeUnityEngineObject.name,
-				caption = packedNativeUnityEngineObject.name + "(className)",
-				size = packedNativeUnityEngineObject.size
+				className = className,
+                name = packedNativeUnityEngineObject.name,
+				caption = packedNativeUnityEngineObject.name + "(" + className +")",
+				size = packedNativeUnityEngineObject.size,
+                isPersistent = packedNativeUnityEngineObject.isPersistent,
+                isDontDestroyOnLoad = packedNativeUnityEngineObject.isDontDestroyOnLoad,
+                isManager = packedNativeUnityEngineObject.isManager,
+                hideFlags = packedNativeUnityEngineObject.hideFlags
 			};
 		}
 	}

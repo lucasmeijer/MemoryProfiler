@@ -1,5 +1,6 @@
 ﻿using System;
 using UnityEditor.MemoryProfiler;
+using UnityEngine;
 
 namespace MemoryProfilerWindow
 {
@@ -18,7 +19,7 @@ namespace MemoryProfilerWindow
 
 		public MemorySection[] managedHeap;
 		public TypeDescription[] typeDescriptions;
-		public string[] classIDNames;
+	    public PackedNativeType[] nativeTypes;
 	}
 
 	public class ThingInMemory
@@ -41,9 +42,13 @@ namespace MemoryProfilerWindow
 		public int classID;
 		public string className;
 		public string name;
+	    public bool isPersistent;
+        public bool isDontDestroyOnLoad;
+	    public bool isManager;
+	    public HideFlags hideFlags;
 	}
 
-	public class GCHandle : ThingInMemory
+    public class GCHandle : ThingInMemory
 	{
 	}
 
