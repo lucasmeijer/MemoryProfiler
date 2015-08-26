@@ -43,6 +43,9 @@ namespace MemoryProfilerWindow
 
 		private IEnumerable<Connection> AddManagedToNativeConnectionsAndRestoreObjectHeaders(PackedMemorySnapshot packedMemorySnapshot, StartIndices startIndices, PackedCrawlerData packedCrawlerData)
 		{
+		    if (packedMemorySnapshot.typeDescriptions.Length == 0)
+		        yield break;
+
 			var unityEngineObjectTypeDescription = packedMemorySnapshot.typeDescriptions.First(td => td.name == "UnityEngine.Object");
 			var instanceIDOffset = unityEngineObjectTypeDescription.fields.Single(f => f.name == "m_InstanceID").offset;
 			for (int i = 0; i != packedCrawlerData.managedObjects.Length; i++)

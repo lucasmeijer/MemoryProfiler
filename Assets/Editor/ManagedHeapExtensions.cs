@@ -32,5 +32,5 @@ namespace MemoryProfilerWindow
 			}
 			return length;
 		}
-	}
+    }
 }

@@ -55,5 +55,6 @@ namespace MemoryProfilerWindow
 	public class StaticFields : ThingInMemory
 	{
 		public TypeDescription typeDescription;
+	    public byte[] storage;
 	}
 }

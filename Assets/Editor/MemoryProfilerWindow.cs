@@ -6,7 +6,10 @@ using Treemap;
 using UnityEditor;
 using UnityEngine;
 using System;
+using System.Net;
 using Assets.MemoryProfiler.Assets.Editor;
+using NUnit.Framework.Constraints;
+using UnityEditor.MemoryProfiler;
 using Object = UnityEngine.Object;
 
 namespace MemoryProfilerWindow
@@ -30,6 +33,8 @@ namespace MemoryProfilerWindow
 	    private ThingInMemory[] _shortestPath;
 	    private static int s_InspectorWidth = 400;
 	    private ShortestPathToRootFinder _shortestPathToRootFinder;
+	    private Item _mouseDownItem;
+	    private PrimitiveValueReader _primitiveValueReader;
 
 	    [MenuItem("Window/MemoryProfiler")]
 		static void Create()
@@ -82,20 +87,38 @@ namespace MemoryProfilerWindow
 				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot ();
 			}
 
+		    if (Event.current.type == EventType.MouseDrag)
+		        _mouseDownItem = null;
 
-
-		    if (Event.current.type == EventType.MouseUp)
+		    if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
 		    {
-		        var mousepos = Event.current.mousePosition;
-		        mousepos.y -= 25;
-		        var pos = _ZoomableArea.ViewToDrawingTransformPoint(mousepos);
-		        //pos.y = 25;
-		        var firstOrDefault = _items.FirstOrDefault(i => i._position.Contains(pos));
-		        if (firstOrDefault != null)
+                
+		        if (_ZoomableArea.drawRect.Contains(Event.current.mousePosition))
 		        {
-		            Select(firstOrDefault);
-		            Event.current.Use();
-		            return;
+		            var mousepos = Event.current.mousePosition;
+		            mousepos.y -= 25;
+		            var pos = _ZoomableArea.ViewToDrawingTransformPoint(mousepos);
+		            var firstOrDefault = _items.FirstOrDefault(i => i._position.Contains(pos));
+		            if (firstOrDefault != null)
+		            {
+		                switch (Event.current.type)
+		                {
+		                    case EventType.MouseDown:
+		                        _mouseDownItem = firstOrDefault;
+		                        break;
+
+                            case EventType.MouseUp:
+		                        if (_mouseDownItem == firstOrDefault)
+		                        {
+		                            Select(firstOrDefault);
+                                    Event.current.Use();
+                                    return;
+                                }
+		                        break;
+                        }
+		              
+		               
+		            }
 		        }
 		    }
 
@@ -128,7 +151,7 @@ namespace MemoryProfilerWindow
 	    private void DrawInspector()
 	    {
 	        GUILayout.BeginArea(new Rect(position.width - s_InspectorWidth, 25, s_InspectorWidth, position.height - 25f));
-
+            _scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
 	        if (_selectedItem == null)
 	            GUILayout.Label("Select an object to see more info");
 	        else
@@ -155,7 +178,9 @@ namespace MemoryProfilerWindow
                     GUILayout.Label("ManagedObject");
                     GUILayout.Label("Type: " + managedObject.typeDescription.name);
                     GUILayout.Label("Address: " + managedObject.address);
-                }
+
+	                DrawFields(managedObject);
+	            }
 
 	            if (thing is GCHandle)
 	            {
@@ -167,16 +192,14 @@ namespace MemoryProfilerWindow
 	            {
 	                GUILayout.Label("Static Fields");
                     GUILayout.Label("Of type: "+ staticFields.typeDescription.name);
+
+                    DrawFields(staticFields.typeDescription, new BytesAndOffset() { bytes = staticFields.typeDescription.staticFieldBytes, offset = 0}, true);
 	            }
 
                 GUILayout.Space(10);
 
                 GUILayout.Label("Referenced by:");
    	            DrawLinks(thing.referencedBy);
-
-	            GUILayout.Space(10);
-                GUILayout.Label("References:");
-	            DrawLinks(thing.references);
 
 	            GUILayout.Space(10);
 	            if (_shortestPath != null)
@@ -197,19 +220,129 @@ namespace MemoryProfilerWindow
 	            }
 
 	        }
+            GUILayout.EndScrollView();
             GUILayout.EndArea();
+	    }
+
+	    private void DrawFields(TypeDescription typeDescription, BytesAndOffset bytesAndOffset, bool useStatics = false)
+	    {
+            foreach (var field in typeDescription.fields.Where(f => f.isStatic == useStatics))
+            {
+                GUILayout.Label("name: " + field.name);
+                GUILayout.Label("offset: " + field.offset);
+                GUILayout.Label("type: " + _snapshot.typeDescriptions[field.typeIndex].name);
+                
+                DrawValueFor(field, bytesAndOffset.Add(field.offset));
+                GUILayout.Space(5);
+            }
+        }
+
+	    private void DrawFields(ManagedObject managedObject)
+	    {
+            GUILayout.Space(10);
+            GUILayout.Label("Fields:");
+	        DrawFields(managedObject.typeDescription, _snapshot.managedHeapSections.Find(managedObject.address + (UInt64)_snapshot.virtualMachineInformation.objectHeaderSize, _snapshot.virtualMachineInformation));
+	    }
+
+	    private void DrawValueFor(FieldDescription field, BytesAndOffset bytesAndOffset)
+	    {
+	        var typeDescription = _snapshot.typeDescriptions[field.typeIndex];
+	       
+
+            switch (typeDescription.name)
+	        {
+                case "System.Int32":
+	                GUILayout.Label(_primitiveValueReader.ReadInt32(bytesAndOffset).ToString());
+	                break;
+                case "System.Int64":
+                    GUILayout.Label(_primitiveValueReader.ReadInt64(bytesAndOffset).ToString());
+                    break;
+                case "System.UInt32":
+                    GUILayout.Label(_primitiveValueReader.ReadUInt32(bytesAndOffset).ToString());
+                    break;
+                case "System.UInt64":
+                    GUILayout.Label(_primitiveValueReader.ReadUInt64(bytesAndOffset).ToString());
+                    break;
+                case "System.Int16":
+                    GUILayout.Label(_primitiveValueReader.ReadInt16(bytesAndOffset).ToString());
+                    break;
+                case "System.UInt16":
+                    GUILayout.Label(_primitiveValueReader.ReadUInt16(bytesAndOffset).ToString());
+                    break;
+                case "System.Byte":
+                    GUILayout.Label(_primitiveValueReader.ReadByte(bytesAndOffset).ToString());
+                    break;
+                case "System.SByte":
+                    GUILayout.Label(_primitiveValueReader.ReadSByte(bytesAndOffset).ToString());
+	                break;
+                case "System.Char":
+                    GUILayout.Label(_primitiveValueReader.ReadChar(bytesAndOffset).ToString());
+                    break;
+                case "System.Boolean":
+                    GUILayout.Label(_primitiveValueReader.ReadBool(bytesAndOffset).ToString());
+                    break;
+                case "System.Single":
+                    GUILayout.Label(_primitiveValueReader.ReadSingle(bytesAndOffset).ToString());
+                    break;
+                case "System.Double":
+                    GUILayout.Label(_primitiveValueReader.ReadDouble(bytesAndOffset).ToString());
+                    break;
+                default:
+	                if (!typeDescription.isValueType)
+	                {
+	                    var item = FindItemPointedToByManagedFieldAt(bytesAndOffset);
+	                    if (item == null)
+	                    {
+	                        EditorGUI.BeginDisabledGroup(true);
+	                        GUILayout.Button("Null");
+	                        EditorGUI.EndDisabledGroup();
+	                    }
+	                    else
+	                    {
+                            DrawLinks(new [] { item._thingInMemory });
+	                     
+	                    }
+	                }
+	                else
+	                {
+	                    DrawFields(typeDescription, bytesAndOffset);
+	                }
+	                break;
+	        }
+	    }
+
+	    private Item FindItemPointedToByManagedFieldAt(BytesAndOffset bytesAndOffset)
+	    {
+	        var stringAddress = _primitiveValueReader.ReadPointer(bytesAndOffset);
+	        return 
+	            _items.FirstOrDefault(i =>
+	            {
+	                var m = i._thingInMemory as ManagedObject;
+	                if (m != null)
+	                {
+	                    return m.address == stringAddress;
+	                }
+	                return false;
+	            });
 	    }
 
 	    private void DrawLinks(ThingInMemory[] thingInMemories)
 	    {
 	        var c = GUI.backgroundColor;
-	        foreach (var rb in thingInMemories)
+            GUI.skin.button.alignment = TextAnchor.UpperLeft;
+            foreach (var rb in thingInMemories)
 	        {
                EditorGUI.BeginDisabledGroup(rb == _selectedItem._thingInMemory);
 
 	            GUI.backgroundColor = ColorFor(rb);
 
-                if (GUILayout.Button(rb.caption))
+	            var caption = rb.caption;
+
+	            var managedObject = rb as ManagedObject;
+	            if (managedObject != null && managedObject.typeDescription.name == "System.String")
+                    caption = _primitiveValueReader.ReadString(_snapshot.managedHeapSections.Find(managedObject.address, _snapshot.virtualMachineInformation));
+
+	            if (GUILayout.Button(caption))
 	                Select(_items.First(i => i._thingInMemory == rb));
                EditorGUI.EndDisabledGroup();
 	        }
@@ -262,6 +395,7 @@ namespace MemoryProfilerWindow
 			_unpackedCrawl = CrawlDataUnpacker.Unpack (packedCrawled);
 			RefreshCaches();
             _shortestPathToRootFinder = new ShortestPathToRootFinder(_unpackedCrawl);
+            _primitiveValueReader = new PrimitiveValueReader(_snapshot.virtualMachineInformation);
         }
 
 		void RefreshCaches()
