@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEditor.MemoryProfiler;
+using System;
+using UnityEngine;
 
 namespace MemoryProfilerWindow
 {
@@ -91,10 +93,11 @@ namespace MemoryProfilerWindow
 		}
 	}
 
+	[System.Serializable]
     internal class PackedCrawlerData
     {
+		public bool valid;
         public PackedMemorySnapshot packedMemorySnapshot;
-
         public StartIndices startIndices;
         public PackedManagedObject[] managedObjects;
         public TypeDescription[] typesWithStaticFields;
@@ -105,14 +108,19 @@ namespace MemoryProfilerWindow
             this.packedMemorySnapshot = packedMemorySnapshot;
             typesWithStaticFields = packedMemorySnapshot.typeDescriptions.Where(t => t.staticFieldBytes != null && t.staticFieldBytes.Length > 0).ToArray();
             startIndices = new StartIndices(this.packedMemorySnapshot.gcHandles.Length, this.packedMemorySnapshot.nativeObjects.Length, typesWithStaticFields.Length);
-        }
+			valid = true;
+		}
     }
 
+	[System.Serializable]
     internal class StartIndices
     {
-        private readonly int _gcHandleCount;
-        private readonly int _nativeObjectCount;
-        private readonly int _staticFieldsCount;
+		[SerializeField]
+        private int _gcHandleCount;
+		[SerializeField]
+		private int _nativeObjectCount;
+		[SerializeField]
+		private int _staticFieldsCount;
 
         public StartIndices(int gcHandleCount, int nativeObjectCount, int staticFieldsCount)
         {

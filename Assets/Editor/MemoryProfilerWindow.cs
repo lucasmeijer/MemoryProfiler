@@ -19,6 +19,9 @@ namespace MemoryProfilerWindow
 		[NonSerialized]
 		UnityEditor.MemoryProfiler.PackedMemorySnapshot _snapshot;
 
+		[SerializeField]
+		PackedCrawlerData _packedCrawled;
+
 		[NonSerialized]
 		CrawledMemorySnapshot _unpackedCrawl;
 
@@ -40,6 +43,11 @@ namespace MemoryProfilerWindow
 		static void Create()
 		{
 			EditorWindow.GetWindow<MemoryProfilerWindow> ();
+		}
+
+		[MenuItem("Window/MemoryProfilerInspect")]
+		static void Inspect()
+		{
 		}
 
 		public void OnDisable()
@@ -77,6 +85,8 @@ namespace MemoryProfilerWindow
 			        shownArea = new Rect(-110f, -110f, 220f, 220f)
 			    };
 			}
+			if (_unpackedCrawl == null && _packedCrawled.valid)
+				Unpack ();
 		}
 
 		void OnGUI()
@@ -152,7 +162,11 @@ namespace MemoryProfilerWindow
 	    {
 	        GUILayout.BeginArea(new Rect(position.width - s_InspectorWidth, 25, s_InspectorWidth, position.height - 25f));
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
-	        if (_selectedItem == null)
+	       
+			GUILayout.Label ("_packedCrawl: " +  _packedCrawled.valid);
+			GUILayout.Label ("_unpackedCrawl: " + ((_unpackedCrawl == null) ? "null" : "notnull"));
+
+			if (_selectedItem == null)
 	            GUILayout.Label("Select an object to see more info");
 	        else
 	        {
@@ -439,17 +453,28 @@ namespace MemoryProfilerWindow
 			GUILayout.EndScrollView();
 		}
 
+		void Unpack ()
+		{
+			_unpackedCrawl = CrawlDataUnpacker.Unpack (_packedCrawled);
+
+			RefreshCaches();
+			_shortestPathToRootFinder = new ShortestPathToRootFinder(_unpackedCrawl);
+			_primitiveValueReader = new PrimitiveValueReader(_snapshot.virtualMachineInformation, _snapshot.managedHeapSections);
+		}
+
 		void IncomingSnapshot(UnityEditor.MemoryProfiler.PackedMemorySnapshot snapshot)
 		{
 			_snapshot = snapshot;
 
+			var timer = new System.Diagnostics.Stopwatch ();
+			timer.Start ();
 			var crawler = new Crawler ();
-			PackedCrawlerData packedCrawled = crawler.Crawl (_snapshot);
+			_packedCrawled = crawler.Crawl (_snapshot);
+			Debug.Log ("Crawl: " + timer.ElapsedMilliseconds + "ms");
+			Unpack ();
+			timer.Reset ();
+			Debug.Log ("Unpack: " + timer.ElapsedMilliseconds + "ms");
 
-			_unpackedCrawl = CrawlDataUnpacker.Unpack (packedCrawled);
-			RefreshCaches();
-            _shortestPathToRootFinder = new ShortestPathToRootFinder(_unpackedCrawl);
-            _primitiveValueReader = new PrimitiveValueReader(_snapshot.virtualMachineInformation, _snapshot.managedHeapSections);
         }
 
 		void RefreshCaches()
@@ -629,13 +654,9 @@ namespace MemoryProfilerWindow
 		{
 			if (thing is NativeUnityEngineObject)
 				return (thing as NativeUnityEngineObject).className;
-			if (thing is ManagedObject)
-				return (thing as ManagedObject).typeDescription.name;
-			if (thing is GCHandle)
-				return "GCHandle";
-			if (thing is StaticFields)
-				return "static fields";
-            throw new ArgumentException("Unknown ThingInMemory: "+thing.GetType());
+//			if (thing is ManagedObject)
+//				return (thing as ManagedObject).typeDescription.name;
+			return thing.GetType ().FullName;
 		}
 
 	}
