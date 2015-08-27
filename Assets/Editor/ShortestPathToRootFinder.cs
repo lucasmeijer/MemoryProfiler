@@ -6,7 +6,7 @@ using MemoryProfilerWindow;
 using UnityEditor.MemoryProfiler;
 using UnityEngine;
 
-namespace Assets.MemoryProfiler.Assets.Editor
+namespace MemoryProfilerWindow
 {
     class ShortestPathToRootFinder
     {
