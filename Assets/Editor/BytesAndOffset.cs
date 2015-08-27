@@ -47,10 +47,12 @@ namespace MemoryProfilerWindow
     class PrimitiveValueReader
     {
         private readonly VirtualMachineInformation _virtualMachineInformation;
+        private readonly MemorySection[] _heapSections;
 
-        public PrimitiveValueReader(VirtualMachineInformation virtualMachineInformation)
+        public PrimitiveValueReader(VirtualMachineInformation virtualMachineInformation, MemorySection[] heapSections)
         {
             _virtualMachineInformation = virtualMachineInformation;
+            _heapSections = heapSections;
         }
 
         public System.Int32 ReadInt32(BytesAndOffset bo)
@@ -104,6 +106,11 @@ namespace MemoryProfilerWindow
                 return ReadUInt32(bo);
             else
                 return ReadUInt64(bo);
+        }
+
+        public UInt64 ReadPointer(UInt64 address)
+        {
+            return ReadPointer(_heapSections.Find(address, _virtualMachineInformation));
         }
 
         public Char ReadChar(BytesAndOffset bytesAndOffset)

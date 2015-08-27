@@ -180,6 +180,11 @@ namespace MemoryProfilerWindow
                     GUILayout.Label("Address: " + managedObject.address);
 
 	                DrawFields(managedObject);
+
+	                if (managedObject.typeDescription.isArray)
+	                {
+	                    DrawArray(managedObject);
+	                }
 	            }
 
 	            if (thing is GCHandle)
@@ -196,8 +201,14 @@ namespace MemoryProfilerWindow
                     DrawFields(staticFields.typeDescription, new BytesAndOffset() { bytes = staticFields.typeDescription.staticFieldBytes, offset = 0}, true);
 	            }
 
-                GUILayout.Space(10);
+	            if (managedObject == null)
+	            {
+                    GUILayout.Space(10);
+                    GUILayout.Label("References:");
+                    DrawLinks(thing.references);
+                }
 
+                GUILayout.Space(10);
                 GUILayout.Label("Referenced by:");
    	            DrawLinks(thing.referencedBy);
 
@@ -224,6 +235,33 @@ namespace MemoryProfilerWindow
             GUILayout.EndArea();
 	    }
 
+	    private void DrawArray(ManagedObject managedObject)
+	    {
+	        var typeDescription = managedObject.typeDescription;
+	        int elementCount = _snapshot.managedHeapSections.ReadArrayLength(managedObject.address, typeDescription, _snapshot.virtualMachineInformation);
+            GUILayout.Label("element count: "+elementCount);
+	        int rank = typeDescription.arrayRank;
+            GUILayout.Label("arrayRank: "+rank);
+            if (_snapshot.typeDescriptions[typeDescription.baseOrElementTypeIndex].isValueType)
+	        {
+	            GUILayout.Label("Cannot yet display elements of value type arrays");
+	            return;
+	        }
+	        if (rank != 1)
+	        {
+	            GUILayout.Label("Cannot display non rank=1 arrays yet.");
+	            return;
+	        }
+            
+	        var pointers = new List<UInt64>();
+	        for (int i = 0; i != elementCount; i++)
+	        {
+	            pointers.Add(_primitiveValueReader.ReadPointer(managedObject.address + (UInt64) _snapshot.virtualMachineInformation.arrayHeaderSize + (UInt64) (i*_snapshot.virtualMachineInformation.pointerSize)));
+	        }
+	        GUILayout.Label("elements:");
+	        DrawLinks(pointers);
+	    }
+
 	    private void DrawFields(TypeDescription typeDescription, BytesAndOffset bytesAndOffset, bool useStatics = false)
 	    {
             foreach (var field in typeDescription.fields.Where(f => f.isStatic == useStatics))
@@ -233,6 +271,7 @@ namespace MemoryProfilerWindow
                 GUILayout.Label("type: " + _snapshot.typeDescriptions[field.typeIndex].name);
                 
                 DrawValueFor(field, bytesAndOffset.Add(field.offset));
+
                 GUILayout.Space(5);
             }
         }
@@ -326,7 +365,22 @@ namespace MemoryProfilerWindow
 	            });
 	    }
 
-	    private void DrawLinks(ThingInMemory[] thingInMemories)
+	    private void DrawLinks(IEnumerable<UInt64> pointers)
+	    {
+	        var thingInMemories = pointers.Select(p => _items.FirstOrDefault(i =>
+	        {
+	            var m = i._thingInMemory as ManagedObject;
+	            if (m != null)
+	            {
+	                return m.address == p;
+	            }
+	            return false;
+	        })._thingInMemory);
+
+	        DrawLinks(thingInMemories);
+	    }
+
+	    private void DrawLinks(IEnumerable<ThingInMemory> thingInMemories)
 	    {
 	        var c = GUI.backgroundColor;
             GUI.skin.button.alignment = TextAnchor.UpperLeft;
@@ -395,7 +449,7 @@ namespace MemoryProfilerWindow
 			_unpackedCrawl = CrawlDataUnpacker.Unpack (packedCrawled);
 			RefreshCaches();
             _shortestPathToRootFinder = new ShortestPathToRootFinder(_unpackedCrawl);
-            _primitiveValueReader = new PrimitiveValueReader(_snapshot.virtualMachineInformation);
+            _primitiveValueReader = new PrimitiveValueReader(_snapshot.virtualMachineInformation, _snapshot.managedHeapSections);
         }
 
 		void RefreshCaches()
