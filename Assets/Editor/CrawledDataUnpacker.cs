@@ -20,7 +20,8 @@ namespace MemoryProfilerWindow
 				staticFields = packedSnapshot.typeDescriptions.Where(t=>t.staticFieldBytes != null & t.staticFieldBytes.Length > 0).Select(t => UnpackStaticFields(t)).ToArray(),
 				typeDescriptions = packedSnapshot.typeDescriptions,
 				managedHeap = packedSnapshot.managedHeapSections,
-                nativeTypes = packedSnapshot.nativeTypes
+                nativeTypes = packedSnapshot.nativeTypes,
+				virtualMachineInformation = packedSnapshot.virtualMachineInformation
 			};
 
 			var combined = new ThingInMemory[0].Concat(result.gcHandles).Concat(result.nativeObjects).Concat(result.staticFields).Concat(result.managedObjects).ToArray();

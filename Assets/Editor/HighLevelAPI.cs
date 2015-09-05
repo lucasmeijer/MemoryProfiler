@@ -20,6 +20,7 @@ namespace MemoryProfilerWindow
 		public MemorySection[] managedHeap;
 		public TypeDescription[] typeDescriptions;
 	    public PackedNativeType[] nativeTypes;
+		public VirtualMachineInformation virtualMachineInformation;
 	}
 
 	public class ThingInMemory

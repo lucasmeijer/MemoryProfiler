@@ -17,18 +17,22 @@ namespace MemoryProfilerWindow
 		Vector2 _scrollPosition;
 		MemoryProfilerWindow _hostWindow;
 		CrawledMemorySnapshot _unpackedCrawl;
-		PackedMemorySnapshot _snapshot;
 		PrimitiveValueReader _primitiveValueReader;
+
+		static class Styles
+		{
+			public static GUIStyle entryEven = "OL EntryBackEven";
+			public static GUIStyle entryOdd = "OL EntryBackOdd";
+		}
+
+		GUILayoutOption labelWidth = GUILayout.Width (150);
 
 		public Inspector(MemoryProfilerWindow hostWindow, CrawledMemorySnapshot unpackedCrawl, PackedMemorySnapshot snapshot)
 		{
 			_unpackedCrawl = unpackedCrawl;
-			_snapshot = snapshot;
 			_hostWindow = hostWindow;
 			_shortestPathToRootFinder = new ShortestPathToRootFinder(unpackedCrawl);
-			if (snapshot == null)
-				return;
-			_primitiveValueReader = new PrimitiveValueReader(_snapshot.virtualMachineInformation, _snapshot.managedHeapSections);
+			_primitiveValueReader = new PrimitiveValueReader(_unpackedCrawl.virtualMachineInformation, _unpackedCrawl.managedHeap);
 		}
 
 		public float width {
@@ -53,23 +57,24 @@ namespace MemoryProfilerWindow
 				var nativeObject = _selectedThing as NativeUnityEngineObject;
 				if (nativeObject != null)
 				{
-					GUILayout.Label("NativeUnityEngineObject");
-					GUILayout.Label("Name: "+nativeObject.name);
-					GUILayout.Label("ClassName: "+nativeObject.className);
-					GUILayout.Label("ClassID: "+nativeObject.classID);
-					GUILayout.Label("instanceID: "+nativeObject.instanceID);
-					GUILayout.Label("isDontDestroyOnLoad:"+nativeObject.isDontDestroyOnLoad);
-					GUILayout.Label("isPersistent:" + nativeObject.isPersistent);
-					GUILayout.Label("isManager:" + nativeObject.isManager);
-					GUILayout.Label("hideFlags: "+nativeObject.hideFlags);
+					GUILayout.Label("NativeUnityEngineObject", EditorStyles.boldLabel);
+					GUILayout.Space (5);
+					EditorGUILayout.LabelField("Name",nativeObject.name);
+					EditorGUILayout.LabelField("ClassName",nativeObject.className);
+					EditorGUILayout.LabelField("ClassID",nativeObject.classID.ToString());
+					EditorGUILayout.LabelField("instanceID",nativeObject.instanceID.ToString());
+					EditorGUILayout.LabelField("isDontDestroyOnLoad",nativeObject.isDontDestroyOnLoad.ToString());
+					EditorGUILayout.LabelField("isPersistent",nativeObject.isPersistent.ToString());
+					EditorGUILayout.LabelField("isManager",nativeObject.isManager.ToString());
+					EditorGUILayout.LabelField("hideFlags",nativeObject.hideFlags.ToString());
 				}
 
 				var managedObject = _selectedThing as ManagedObject;
 				if (managedObject != null)
 				{
 					GUILayout.Label("ManagedObject");
-					GUILayout.Label("Type: " + managedObject.typeDescription.name);
-					GUILayout.Label("Address: " + managedObject.address);
+					EditorGUILayout.LabelField("Type",managedObject.typeDescription.name);
+					EditorGUILayout.LabelField("Address",managedObject.address.ToString());
 
 					DrawFields(managedObject);
 
@@ -96,8 +101,12 @@ namespace MemoryProfilerWindow
 				if (managedObject == null)
 				{
 					GUILayout.Space(10);
-					GUILayout.Label("References:");
+					GUILayout.BeginHorizontal ();
+					GUILayout.Label ("References:", labelWidth);
+					GUILayout.BeginVertical ();
 					DrawLinks(_selectedThing.references);
+					GUILayout.EndVertical ();
+					GUILayout.EndHorizontal ();
 				}
 
 				GUILayout.Space(10);
@@ -130,11 +139,11 @@ namespace MemoryProfilerWindow
 		private void DrawArray(ManagedObject managedObject)
 		{
 			var typeDescription = managedObject.typeDescription;
-			int elementCount = _snapshot.managedHeapSections.ReadArrayLength(managedObject.address, typeDescription, _snapshot.virtualMachineInformation);
+			int elementCount = _unpackedCrawl.managedHeap.ReadArrayLength(managedObject.address, typeDescription, _unpackedCrawl.virtualMachineInformation);
 			GUILayout.Label("element count: "+elementCount);
 			int rank = typeDescription.arrayRank;
 			GUILayout.Label("arrayRank: "+rank);
-			if (_snapshot.typeDescriptions[typeDescription.baseOrElementTypeIndex].isValueType)
+			if (_unpackedCrawl.typeDescriptions[typeDescription.baseOrElementTypeIndex].isValueType)
 			{
 				GUILayout.Label("Cannot yet display elements of value type arrays");
 				return;
@@ -148,7 +157,7 @@ namespace MemoryProfilerWindow
 			var pointers = new List<UInt64>();
 			for (int i = 0; i != elementCount; i++)
 			{
-				pointers.Add(_primitiveValueReader.ReadPointer(managedObject.address + (UInt64) _snapshot.virtualMachineInformation.arrayHeaderSize + (UInt64) (i*_snapshot.virtualMachineInformation.pointerSize)));
+				pointers.Add(_primitiveValueReader.ReadPointer(managedObject.address + (UInt64) _unpackedCrawl.virtualMachineInformation.arrayHeaderSize + (UInt64) (i*_unpackedCrawl.virtualMachineInformation.pointerSize)));
 			}
 			GUILayout.Label("elements:");
 			DrawLinks(pointers);
@@ -156,15 +165,20 @@ namespace MemoryProfilerWindow
 
 		private void DrawFields(TypeDescription typeDescription, BytesAndOffset bytesAndOffset, bool useStatics = false)
 		{
+			int counter = 0;
 			foreach (var field in typeDescription.fields.Where(f => f.isStatic == useStatics))
 			{
-				GUILayout.Label("name: " + field.name);
-				GUILayout.Label("offset: " + field.offset);
-				GUILayout.Label("type: " + _snapshot.typeDescriptions[field.typeIndex].name);
-
+				counter++;
+				var gUIStyle = counter % 2 == 0 ? Styles.entryEven : Styles.entryOdd;
+				gUIStyle.margin = new RectOffset (0, 0, 0, 0);
+				gUIStyle.overflow = new RectOffset (0, 0, 0, 0);
+				gUIStyle.padding = EditorStyles.label.padding;
+				GUILayout.BeginHorizontal (gUIStyle);
+				GUILayout.Label (field.name, labelWidth);
+				GUILayout.BeginVertical ();
 				DrawValueFor(field, bytesAndOffset.Add(field.offset));
-
-				GUILayout.Space(5);
+				GUILayout.EndVertical ();
+				GUILayout.EndHorizontal ();
 			}
 		}
 
@@ -172,12 +186,12 @@ namespace MemoryProfilerWindow
 		{
 			GUILayout.Space(10);
 			GUILayout.Label("Fields:");
-			DrawFields(managedObject.typeDescription, _snapshot.managedHeapSections.Find(managedObject.address + (UInt64)_snapshot.virtualMachineInformation.objectHeaderSize, _snapshot.virtualMachineInformation));
+			DrawFields(managedObject.typeDescription, _unpackedCrawl.managedHeap.Find(managedObject.address + (UInt64) _unpackedCrawl.virtualMachineInformation.objectHeaderSize, _unpackedCrawl.virtualMachineInformation));
 		}
 
 		private void DrawValueFor(FieldDescription field, BytesAndOffset bytesAndOffset)
 		{
-			var typeDescription = _snapshot.typeDescriptions[field.typeIndex];
+			var typeDescription = _unpackedCrawl.typeDescriptions[field.typeIndex];
 
 			switch (typeDescription.name)
 			{
@@ -218,10 +232,12 @@ namespace MemoryProfilerWindow
 				GUILayout.Label(_primitiveValueReader.ReadDouble(bytesAndOffset).ToString());
 				break;
 			default:
+				
 				if (!typeDescription.isValueType)
 				{
 					/*
-					var item = FindItemPointedToByManagedFieldAt(bytesAndOffset);
+					var item = _unpackedCrawl.allObjects.OfType<ManagedObject> ().FirstOrDefault (mo => mo.address == 
+
 					if (item == null)
 					{
 						EditorGUI.BeginDisabledGroup(true);
@@ -231,7 +247,6 @@ namespace MemoryProfilerWindow
 					else
 					{
 						DrawLinks(new [] { item._thingInMemory });
-
 					}*/
 				}
 				else
@@ -278,7 +293,7 @@ namespace MemoryProfilerWindow
 
 				var managedObject = rb as ManagedObject;
 				if (managedObject != null && managedObject.typeDescription.name == "System.String")
-					caption = _primitiveValueReader.ReadString(_snapshot.managedHeapSections.Find(managedObject.address, _snapshot.virtualMachineInformation));
+					caption = _primitiveValueReader.ReadString(_unpackedCrawl.managedHeap.Find(managedObject.address, _unpackedCrawl.virtualMachineInformation));
 
 				if (GUILayout.Button (caption))
 					_hostWindow.SelectThing (rb);

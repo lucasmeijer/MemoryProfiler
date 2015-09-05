@@ -1,136 +1,81 @@
+﻿using System;
+using UnityEngine;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using Assets.Editor.Treemap;
 using Treemap;
 using UnityEditor;
-using UnityEngine;
-using System;
-using System.Net;
-using NUnit.Framework.Constraints;
-using UnityEditor.MemoryProfiler;
-using Object = UnityEngine.Object;
+using Assets.Editor.Treemap;
+using System.Linq;
 
 namespace MemoryProfilerWindow
 {
-	public class MemoryProfilerWindow : EditorWindow
-	{		
-		[NonSerialized]
-		UnityEditor.MemoryProfiler.PackedMemorySnapshot _snapshot;
-
-		[SerializeField]
-		PackedCrawlerData _packedCrawled;
-
-		[NonSerialized]
+	public class TreeMapView
+	{
 		CrawledMemorySnapshot _unpackedCrawl;
-
-		Vector2 _scrollPosition;
 		private ZoomableArea _ZoomableArea;
-		private Dictionary<string, Group> _groups;
-		private List<Item> _items;
-		private List<Mesh> _cachedMeshes;
-        [NonSerialized]
-		private bool _registered = false;
-	    private Item _selectedItem;
-	    private Item _mouseDownItem;
-	 	private Inspector _inspector;
+		private Dictionary<string, Group> _groups = new Dictionary<string, Group> ();
+		private List<Item> _items = new List<Item> ();
+		private List<Mesh> _cachedMeshes = new List<Mesh> ();
+		private Item _selectedItem;
+		private Item _mouseDownItem;
+		MemoryProfilerWindow _hostWindow;
 
-	    [MenuItem("Window/MemoryProfiler")]
-		static void Create()
+		public TreeMapView (MemoryProfilerWindow hostWindow, CrawledMemorySnapshot _unpackedCrawl)
 		{
-			EditorWindow.GetWindow<MemoryProfilerWindow> ();
+			this._unpackedCrawl = _unpackedCrawl;
+			this._hostWindow = hostWindow;
+
+			_ZoomableArea = new ZoomableArea(true)
+			{
+				vRangeMin = -110f,
+				vRangeMax = 110f,
+				hRangeMin = -110f,
+				hRangeMax = 110f,
+				hBaseRangeMin = -110f,
+				vBaseRangeMin = -110f,
+				hBaseRangeMax = 110f,
+				vBaseRangeMax = 110f,
+				shownArea = new Rect(-110f, -110f, 220f, 220f)
+			};
+			RefreshCaches ();
+			RefreshMesh ();
 		}
 
-		[MenuItem("Window/MemoryProfilerInspect")]
-		static void Inspect()
+		public void Draw()
 		{
-		}
-
-		public void OnDisable()
-		{
-		//	UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived -= IncomingSnapshot;
-		}
-
-		public void Initialize()
-		{
-			if (_groups == null)
+			if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
 			{
-				_groups = new Dictionary<string, Group>();
-			}
-			if (_items == null)
-			{
-				_items = new List<Item>();
-			}
-			if (!_registered)
-			{
-				UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived += IncomingSnapshot;
-				_registered = true;
-			}
-			if (_ZoomableArea == null)
-			{
-			    _ZoomableArea = new ZoomableArea(true)
-			    {
-			        vRangeMin = -110f,
-			        vRangeMax = 110f,
-			        hRangeMin = -110f,
-			        hRangeMax = 110f,
-			        hBaseRangeMin = -110f,
-			        vBaseRangeMin = -110f,
-			        hBaseRangeMax = 110f,
-			        vBaseRangeMax = 110f,
-			        shownArea = new Rect(-110f, -110f, 220f, 220f)
-			    };
-			}
-			if (_unpackedCrawl == null && _packedCrawled.valid)
-				Unpack ();
-		}
+				if (_ZoomableArea.drawRect.Contains(Event.current.mousePosition))
+				{
+					var mousepos = Event.current.mousePosition;
+					mousepos.y -= 25;
+					var pos = _ZoomableArea.ViewToDrawingTransformPoint(mousepos);
+					var firstOrDefault = _items.FirstOrDefault(i => i._position.Contains(pos));
+					if (firstOrDefault != null)
+					{
+						switch (Event.current.type)
+						{
+						case EventType.MouseDown:
+							_mouseDownItem = firstOrDefault;
+							break;
 
-		void OnGUI()
-		{
-			Initialize();
+						case EventType.MouseUp:
+							if (_mouseDownItem == firstOrDefault)
+							{
+								_hostWindow.SelectThing(firstOrDefault._thingInMemory);
+								Event.current.Use();
+								return;
+							}
+							break;
+						}
 
-			if (GUILayout.Button ("Take Snapshot")) {
-				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot ();
+
+					}
+				}
 			}
 
-		    if (Event.current.type == EventType.MouseDrag)
-		        _mouseDownItem = null;
+			Rect r = new Rect(0f, 25f, _hostWindow.position.width-_hostWindow._inspector.width, _hostWindow.position.height - 25f);
 
-		    if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
-		    {
-                
-		        if (_ZoomableArea.drawRect.Contains(Event.current.mousePosition))
-		        {
-		            var mousepos = Event.current.mousePosition;
-		            mousepos.y -= 25;
-		            var pos = _ZoomableArea.ViewToDrawingTransformPoint(mousepos);
-		            var firstOrDefault = _items.FirstOrDefault(i => i._position.Contains(pos));
-		            if (firstOrDefault != null)
-		            {
-		                switch (Event.current.type)
-		                {
-		                    case EventType.MouseDown:
-		                        _mouseDownItem = firstOrDefault;
-		                        break;
-
-                            case EventType.MouseUp:
-		                        if (_mouseDownItem == firstOrDefault)
-		                        {
-									SelectThing(firstOrDefault._thingInMemory);
-                                    Event.current.Use();
-                                    return;
-                                }
-		                        break;
-                        }
-		              
-		               
-		            }
-		        }
-		    }
-
-			Rect r = new Rect(0f, 25f, position.width-_inspector.width, position.height - 25f);
-
-            _ZoomableArea.rect = r;
+			_ZoomableArea.rect = r;
 			_ZoomableArea.BeginViewGUI();
 
 			GUI.BeginGroup(r);
@@ -139,63 +84,14 @@ namespace MemoryProfilerWindow
 			GUI.EndGroup();
 
 			_ZoomableArea.EndViewGUI();
-			Repaint();
-
-			_inspector.Draw ();
-            
-			//RenderDebugList();
+			_hostWindow.Repaint();
 		}
 
-		public void SelectThing(ThingInMemory thing)
+		public void SelectThing (ThingInMemory thing)
 		{
 			_selectedItem = _items.First (i => i._thingInMemory == thing);
-			_inspector.SelectThing (thing);
 			RefreshMesh ();
 		}
-
-	    private void RenderDebugList()
-		{
-			_scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
-
-			foreach (var thing in _unpackedCrawl.allObjects)
-			{
-				var mo = thing as ManagedObject;
-				if (mo != null)
-					GUILayout.Label("MO: " + mo.typeDescription.name);
-
-				var gch = thing as GCHandle;
-				if (gch != null)
-					GUILayout.Label("GCH: " + gch.caption);
-
-				var sf = thing as StaticFields;
-				if (sf != null)
-					GUILayout.Label("SF: " + sf.typeDescription.name);
-			}
-
-			GUILayout.EndScrollView();
-		}
-
-		void Unpack ()
-		{
-			_unpackedCrawl = CrawlDataUnpacker.Unpack (_packedCrawled);
-			_inspector = new Inspector (this, _unpackedCrawl, _snapshot);
-			RefreshCaches();
-		}
-
-		void IncomingSnapshot(UnityEditor.MemoryProfiler.PackedMemorySnapshot snapshot)
-		{
-			_snapshot = snapshot;
-
-			var timer = new System.Diagnostics.Stopwatch ();
-			timer.Start ();
-			var crawler = new Crawler ();
-			_packedCrawled = crawler.Crawl (_snapshot);
-			Debug.Log ("Crawl: " + timer.ElapsedMilliseconds + "ms");
-			Unpack ();
-			timer.Reset ();
-			Debug.Log ("Unpack: " + timer.ElapsedMilliseconds + "ms");
-
-        }
 
 		void RefreshCaches()
 		{
@@ -267,7 +163,7 @@ namespace MemoryProfilerWindow
 			{
 				for (int i = 0; i < _cachedMeshes.Count; i++)
 				{
-					Object.DestroyImmediate(_cachedMeshes[i]);
+					UnityEngine.Object.DestroyImmediate(_cachedMeshes[i]);
 				}
 				_cachedMeshes.Clear();
 			}
@@ -287,11 +183,11 @@ namespace MemoryProfilerWindow
 				vertices[index++] = new Vector3(item._position.xMin, item._position.yMax, 0f);
 
 				index = itemIndex * 4;
-			    var color = item.color;
-			    if (item == _selectedItem)
-			        color *= 1.5f;
+				var color = item.color;
+				if (item == _selectedItem)
+					color *= 1.5f;
 
-                colors[index++] = color;
+				colors[index++] = color;
 				colors[index++] = color * 0.75f;
 				colors[index++] = color * 0.5f;
 				colors[index++] = color * 0.75f;
@@ -374,11 +270,10 @@ namespace MemoryProfilerWindow
 		{
 			if (thing is NativeUnityEngineObject)
 				return (thing as NativeUnityEngineObject).className;
-//			if (thing is ManagedObject)
-//				return (thing as ManagedObject).typeDescription.name;
+			//			if (thing is ManagedObject)
+			//				return (thing as ManagedObject).typeDescription.name;
 			return thing.GetType ().FullName;
 		}
-
 	}
 }
 
