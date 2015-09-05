@@ -1,0 +1,124 @@
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using Assets.Editor.Treemap;
+using Treemap;
+using UnityEditor;
+using UnityEngine;
+using System;
+using System.Net;
+using NUnit.Framework.Constraints;
+using UnityEditor.MemoryProfiler;
+using Object = UnityEngine.Object;
+
+namespace MemoryProfilerWindow
+{
+	public class MemoryProfilerWindow : EditorWindow
+	{		
+		[NonSerialized]
+		UnityEditor.MemoryProfiler.PackedMemorySnapshot _snapshot;
+
+		[SerializeField]
+		PackedCrawlerData _packedCrawled;
+
+		[NonSerialized]
+		CrawledMemorySnapshot _unpackedCrawl;
+
+		Vector2 _scrollPosition;
+
+        [NonSerialized]
+		private bool _registered = false;
+	 	public Inspector _inspector;
+		TreeMapView _treeMapView;
+
+	    [MenuItem("Window/MemoryProfiler")]
+		static void Create()
+		{
+			EditorWindow.GetWindow<MemoryProfilerWindow> ();
+		}
+
+		[MenuItem("Window/MemoryProfilerInspect")]
+		static void Inspect()
+		{
+		}
+
+		public void OnDisable()
+		{
+		//	UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived -= IncomingSnapshot;
+		}
+
+		public void Initialize()
+		{
+			if (!_registered)
+			{
+				UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived += IncomingSnapshot;
+				_registered = true;
+			}
+
+			if (_unpackedCrawl == null && _packedCrawled.valid)
+				Unpack ();
+		}
+
+		void OnGUI()
+		{
+			Initialize();
+
+			if (GUILayout.Button ("Take Snapshot")) {
+				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot ();
+			}
+
+		   	
+			_treeMapView.Draw ();
+			_inspector.Draw ();
+            
+			//RenderDebugList();
+		}
+
+		public void SelectThing(ThingInMemory thing)
+		{
+			_inspector.SelectThing (thing);
+			_treeMapView.SelectThing (thing);
+		}
+
+	    private void RenderDebugList()
+		{
+			_scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
+
+			foreach (var thing in _unpackedCrawl.allObjects)
+			{
+				var mo = thing as ManagedObject;
+				if (mo != null)
+					GUILayout.Label("MO: " + mo.typeDescription.name);
+
+				var gch = thing as GCHandle;
+				if (gch != null)
+					GUILayout.Label("GCH: " + gch.caption);
+
+				var sf = thing as StaticFields;
+				if (sf != null)
+					GUILayout.Label("SF: " + sf.typeDescription.name);
+			}
+
+			GUILayout.EndScrollView();
+		}
+
+		void Unpack ()
+		{
+			_unpackedCrawl = CrawlDataUnpacker.Unpack (_packedCrawled);
+			_inspector = new Inspector (this, _unpackedCrawl, _snapshot);
+			_treeMapView = new TreeMapView (this, _unpackedCrawl);
+		}
+
+		void IncomingSnapshot(PackedMemorySnapshot snapshot)
+		{
+			_snapshot = snapshot;
+
+			_packedCrawled = new Crawler ().Crawl (_snapshot);
+			Unpack ();
+        }
+
+
+
+	}
+}
+
