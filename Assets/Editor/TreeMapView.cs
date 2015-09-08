@@ -173,16 +173,17 @@ namespace MemoryProfilerWindow
 			Color[] colors = new Color[maxVerts];
 			int[] triangles = new int[maxVerts * 6 / 4];
 
-			int itemIndex = 0;
+			int meshItemIndex = 0;
+			int totalItemIndex = 0;
 			foreach (Item item in _items)
 			{
-				int index = itemIndex * 4;
+				int index = meshItemIndex * 4;
 				vertices[index++] = new Vector3(item._position.xMin, item._position.yMin, 0f);
 				vertices[index++] = new Vector3(item._position.xMax, item._position.yMin, 0f);
 				vertices[index++] = new Vector3(item._position.xMax, item._position.yMax, 0f);
 				vertices[index++] = new Vector3(item._position.xMin, item._position.yMax, 0f);
 
-				index = itemIndex * 4;
+				index = meshItemIndex * 4;
 				var color = item.color;
 				if (item == _selectedItem)
 					color *= 1.5f;
@@ -192,17 +193,18 @@ namespace MemoryProfilerWindow
 				colors[index++] = color * 0.5f;
 				colors[index++] = color * 0.75f;
 
-				index = itemIndex * 6;
-				triangles[index++] = itemIndex * 4 + 0;
-				triangles[index++] = itemIndex * 4 + 1;
-				triangles[index++] = itemIndex * 4 + 3;
-				triangles[index++] = itemIndex * 4 + 1;
-				triangles[index++] = itemIndex * 4 + 2;
-				triangles[index++] = itemIndex * 4 + 3;
+				index = meshItemIndex * 6;
+				triangles[index++] = meshItemIndex * 4 + 0;
+				triangles[index++] = meshItemIndex * 4 + 1;
+				triangles[index++] = meshItemIndex * 4 + 3;
+				triangles[index++] = meshItemIndex * 4 + 1;
+				triangles[index++] = meshItemIndex * 4 + 2;
+				triangles[index++] = meshItemIndex * 4 + 3;
 
-				itemIndex++;
+				meshItemIndex++;
+				totalItemIndex++;
 
-				if (itemIndex >= maxVerts / 4 || itemIndex == _items.Count)
+				if (meshItemIndex >= maxVerts / 4 || totalItemIndex == _items.Count)
 				{
 					Mesh mesh = new Mesh();
 					mesh.hideFlags = HideFlags.HideAndDontSave;
@@ -214,8 +216,7 @@ namespace MemoryProfilerWindow
 					vertices = new Vector3[maxVerts];
 					colors = new Color[maxVerts];
 					triangles = new int[maxVerts * 6 / 4];
-
-					itemIndex = 0;
+					meshItemIndex = 0;
 				}
 			}
 		}
