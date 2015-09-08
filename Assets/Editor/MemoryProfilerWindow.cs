@@ -14,7 +14,7 @@ using Object = UnityEngine.Object;
 namespace MemoryProfilerWindow
 {
 	public class MemoryProfilerWindow : EditorWindow
-	{		
+	{
 		[NonSerialized]
 		UnityEditor.MemoryProfiler.PackedMemorySnapshot _snapshot;
 
@@ -55,7 +55,7 @@ namespace MemoryProfilerWindow
 				_registered = true;
 			}
 
-			if (_unpackedCrawl == null && _packedCrawled.valid)
+			if (_unpackedCrawl == null && _packedCrawled != null && _packedCrawled.valid)
 				Unpack ();
 		}
 
@@ -67,9 +67,10 @@ namespace MemoryProfilerWindow
 				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot ();
 			}
 
-		   	
-			_treeMapView.Draw ();
-			_inspector.Draw ();
+		   	if (_treeMapView != null)
+				_treeMapView.Draw ();
+			if (_inspector != null)
+				_inspector.Draw();
             
 			//RenderDebugList();
 		}

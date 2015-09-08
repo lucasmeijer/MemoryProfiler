@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using System.Collections.Generic;
 using Treemap;
@@ -11,7 +11,7 @@ namespace MemoryProfilerWindow
 	public class TreeMapView
 	{
 		CrawledMemorySnapshot _unpackedCrawl;
-		private ZoomableArea _ZoomableArea;
+		private ZoomArea _ZoomArea;
 		private Dictionary<string, Group> _groups = new Dictionary<string, Group> ();
 		private List<Item> _items = new List<Item> ();
 		private List<Mesh> _cachedMeshes = new List<Mesh> ();
@@ -24,7 +24,7 @@ namespace MemoryProfilerWindow
 			this._unpackedCrawl = _unpackedCrawl;
 			this._hostWindow = hostWindow;
 
-			_ZoomableArea = new ZoomableArea(true)
+			_ZoomArea = new ZoomArea(true)
 			{
 				vRangeMin = -110f,
 				vRangeMax = 110f,
@@ -42,13 +42,13 @@ namespace MemoryProfilerWindow
 
 		public void Draw()
 		{
-			if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+			if ((Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp) && Event.current.button == 0)
 			{
-				if (_ZoomableArea.drawRect.Contains(Event.current.mousePosition))
+				if (_ZoomArea.drawRect.Contains(Event.current.mousePosition))
 				{
 					var mousepos = Event.current.mousePosition;
 					mousepos.y -= 25;
-					var pos = _ZoomableArea.ViewToDrawingTransformPoint(mousepos);
+					var pos = _ZoomArea.ViewToDrawingTransformPoint(mousepos);
 					var firstOrDefault = _items.FirstOrDefault(i => i._position.Contains(pos));
 					if (firstOrDefault != null)
 					{
@@ -75,15 +75,15 @@ namespace MemoryProfilerWindow
 
 			Rect r = new Rect(0f, 25f, _hostWindow.position.width-_hostWindow._inspector.width, _hostWindow.position.height - 25f);
 
-			_ZoomableArea.rect = r;
-			_ZoomableArea.BeginViewGUI();
+			_ZoomArea.rect = r;
+			_ZoomArea.BeginViewGUI();
 
 			GUI.BeginGroup(r);
-			Handles.matrix = _ZoomableArea.drawingToViewMatrix;
+			Handles.matrix = _ZoomArea.drawingToViewMatrix;
 			RenderTreemap();
 			GUI.EndGroup();
 
-			_ZoomableArea.EndViewGUI();
+			_ZoomArea.EndViewGUI();
 			_hostWindow.Repaint();
 		}
 
@@ -241,11 +241,11 @@ namespace MemoryProfilerWindow
 				return;
 
 			GUI.color = Color.black;
-			Matrix4x4 mat = _ZoomableArea.drawingToViewMatrix;
+			Matrix4x4 mat = _ZoomArea.drawingToViewMatrix;
 
 			foreach (Group group in _groups.Values)
 			{
-				if (Utility.IsInside(group._position, _ZoomableArea.shownArea))
+				if (Utility.IsInside(group._position, _ZoomArea.shownArea))
 				{
 					foreach (Item item in group._items)
 					{
