@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEditor.MemoryProfiler;
 using UnityEngine;
 
@@ -15,11 +15,11 @@ namespace MemoryProfilerWindow
 		public StaticFields[] staticFields;
 
 		//contains concatenation of nativeObjects, gchandles, managedobjects and staticfields
-		public ThingInMemory[] allObjects; 
+		public ThingInMemory[] allObjects;
 
 		public MemorySection[] managedHeap;
 		public TypeDescription[] typeDescriptions;
-	    public PackedNativeType[] nativeTypes;
+		public PackedNativeType[] nativeTypes;
 		public VirtualMachineInformation virtualMachineInformation;
 	}
 
@@ -43,19 +43,19 @@ namespace MemoryProfilerWindow
 		public int classID;
 		public string className;
 		public string name;
-	    public bool isPersistent;
-        public bool isDontDestroyOnLoad;
-	    public bool isManager;
-	    public HideFlags hideFlags;
+		public bool isPersistent;
+		public bool isDontDestroyOnLoad;
+		public bool isManager;
+		public HideFlags hideFlags;
 	}
 
-    public class GCHandle : ThingInMemory
+	public class GCHandle : ThingInMemory
 	{
 	}
 
 	public class StaticFields : ThingInMemory
 	{
 		public TypeDescription typeDescription;
-	    public byte[] storage;
+		public byte[] storage;
 	}
 }

@@ -14,7 +14,7 @@ namespace Treemap
 		public Rect _position;
 		public List<Item> _items;
 		private float _totalMemorySize = -1;
-
+		
 		public float totalMemorySize
 		{
 			get

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor.MemoryProfiler;
 using System;
@@ -10,17 +10,17 @@ namespace MemoryProfilerWindow
 	{
 		public static CrawledMemorySnapshot Unpack(PackedCrawlerData packedCrawlerData)
 		{
-		    var packedSnapshot = packedCrawlerData.packedMemorySnapshot;
+			var packedSnapshot = packedCrawlerData.packedMemorySnapshot;
 
 			var result = new CrawledMemorySnapshot
 			{
 				nativeObjects = packedSnapshot.nativeObjects.Select(packedNativeUnityEngineObject => UnpackNativeUnityEngineObject(packedSnapshot, packedNativeUnityEngineObject)).ToArray(),
 				managedObjects = packedCrawlerData.managedObjects.Select(pm => UnpackManagedObject(packedSnapshot, pm)).ToArray(),
 				gcHandles = packedSnapshot.gcHandles.Select(pgc => UnpackGCHandle(packedSnapshot)).ToArray(),
-				staticFields = packedSnapshot.typeDescriptions.Where(t=>t.staticFieldBytes != null & t.staticFieldBytes.Length > 0).Select(t => UnpackStaticFields(t)).ToArray(),
+				staticFields = packedSnapshot.typeDescriptions.Where(t => t.staticFieldBytes != null & t.staticFieldBytes.Length > 0).Select(t => UnpackStaticFields(t)).ToArray(),
 				typeDescriptions = packedSnapshot.typeDescriptions,
 				managedHeap = packedSnapshot.managedHeapSections,
-                nativeTypes = packedSnapshot.nativeTypes,
+				nativeTypes = packedSnapshot.nativeTypes,
 				virtualMachineInformation = packedSnapshot.virtualMachineInformation
 			};
 
@@ -56,11 +56,11 @@ namespace MemoryProfilerWindow
 		static StaticFields UnpackStaticFields(TypeDescription typeDescription)
 		{
 			return new StaticFields()
-			{
-				typeDescription = typeDescription,
-				caption = "static fields of "+typeDescription.name,
-				size = typeDescription.staticFieldBytes.Length
-			};
+				   {
+					   typeDescription = typeDescription,
+					   caption = "static fields of " + typeDescription.name,
+					   size = typeDescription.staticFieldBytes.Length
+				   };
 		}
 
 		static GCHandle UnpackGCHandle(PackedMemorySnapshot packedSnapshot)
@@ -76,63 +76,63 @@ namespace MemoryProfilerWindow
 
 		static NativeUnityEngineObject UnpackNativeUnityEngineObject(PackedMemorySnapshot packedSnapshot, PackedNativeUnityEngineObject packedNativeUnityEngineObject)
 		{
-		    var className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name;
+			var className = packedSnapshot.nativeTypes[packedNativeUnityEngineObject.classId].name;
 
-            return new NativeUnityEngineObject()
-			{
-				instanceID = packedNativeUnityEngineObject.instanceId,
-				classID = packedNativeUnityEngineObject.classId,
-				className = className,
-                name = packedNativeUnityEngineObject.name,
-				caption = packedNativeUnityEngineObject.name + "(" + className +")",
-				size = packedNativeUnityEngineObject.size,
-                isPersistent = packedNativeUnityEngineObject.isPersistent,
-                isDontDestroyOnLoad = packedNativeUnityEngineObject.isDontDestroyOnLoad,
-                isManager = packedNativeUnityEngineObject.isManager,
-                hideFlags = packedNativeUnityEngineObject.hideFlags
-			};
+			return new NativeUnityEngineObject()
+				   {
+					   instanceID = packedNativeUnityEngineObject.instanceId,
+					   classID = packedNativeUnityEngineObject.classId,
+					   className = className,
+					   name = packedNativeUnityEngineObject.name,
+					   caption = packedNativeUnityEngineObject.name + "(" + className + ")",
+					   size = packedNativeUnityEngineObject.size,
+					   isPersistent = packedNativeUnityEngineObject.isPersistent,
+					   isDontDestroyOnLoad = packedNativeUnityEngineObject.isDontDestroyOnLoad,
+					   isManager = packedNativeUnityEngineObject.isManager,
+					   hideFlags = packedNativeUnityEngineObject.hideFlags
+				   };
 		}
 	}
 
 	[System.Serializable]
-    internal class PackedCrawlerData
-    {
+	internal class PackedCrawlerData
+	{
 		public bool valid;
-        public PackedMemorySnapshot packedMemorySnapshot;
-        public StartIndices startIndices;
-        public PackedManagedObject[] managedObjects;
-        public TypeDescription[] typesWithStaticFields;
-        public Connection[] connections;
+		public PackedMemorySnapshot packedMemorySnapshot;
+		public StartIndices startIndices;
+		public PackedManagedObject[] managedObjects;
+		public TypeDescription[] typesWithStaticFields;
+		public Connection[] connections;
 
-        public PackedCrawlerData(PackedMemorySnapshot packedMemorySnapshot)
-        {
-            this.packedMemorySnapshot = packedMemorySnapshot;
-            typesWithStaticFields = packedMemorySnapshot.typeDescriptions.Where(t => t.staticFieldBytes != null && t.staticFieldBytes.Length > 0).ToArray();
-            startIndices = new StartIndices(this.packedMemorySnapshot.gcHandles.Length, this.packedMemorySnapshot.nativeObjects.Length, typesWithStaticFields.Length);
+		public PackedCrawlerData(PackedMemorySnapshot packedMemorySnapshot)
+		{
+			this.packedMemorySnapshot = packedMemorySnapshot;
+			typesWithStaticFields = packedMemorySnapshot.typeDescriptions.Where(t => t.staticFieldBytes != null && t.staticFieldBytes.Length > 0).ToArray();
+			startIndices = new StartIndices(this.packedMemorySnapshot.gcHandles.Length, this.packedMemorySnapshot.nativeObjects.Length, typesWithStaticFields.Length);
 			valid = true;
 		}
-    }
+	}
 
 	[System.Serializable]
-    internal class StartIndices
-    {
+	internal class StartIndices
+	{
 		[SerializeField]
-        private int _gcHandleCount;
+		private int _gcHandleCount;
 		[SerializeField]
 		private int _nativeObjectCount;
 		[SerializeField]
 		private int _staticFieldsCount;
 
-        public StartIndices(int gcHandleCount, int nativeObjectCount, int staticFieldsCount)
-        {
-            _gcHandleCount = gcHandleCount;
-            _nativeObjectCount = nativeObjectCount;
-            _staticFieldsCount = staticFieldsCount;
-        }
+		public StartIndices(int gcHandleCount, int nativeObjectCount, int staticFieldsCount)
+		{
+			_gcHandleCount = gcHandleCount;
+			_nativeObjectCount = nativeObjectCount;
+			_staticFieldsCount = staticFieldsCount;
+		}
 
-        public int OfFirstGCHandle { get { return 0; } }
-        public int OfFirstNativeObject { get { return OfFirstGCHandle + _gcHandleCount; } }
-        public int OfFirstStaticFields { get { return OfFirstNativeObject + _nativeObjectCount; } }
-        public int OfFirstManagedObject { get { return OfFirstStaticFields + _staticFieldsCount;  } }
-    }
+		public int OfFirstGCHandle { get { return 0; } }
+		public int OfFirstNativeObject { get { return OfFirstGCHandle + _gcHandleCount; } }
+		public int OfFirstStaticFields { get { return OfFirstNativeObject + _nativeObjectCount; } }
+		public int OfFirstManagedObject { get { return OfFirstStaticFields + _staticFieldsCount; } }
+	}
 }

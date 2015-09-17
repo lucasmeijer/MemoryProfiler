@@ -152,6 +152,7 @@ public class ZoomArea
 				sliderWidth = 15;
 			}
 		}
+
 		public void InitGUIStyles(bool minimalGUI)
 		{
 			if (minimalGUI)
@@ -177,7 +178,6 @@ public class ZoomArea
 				verticalScrollbar = GUI.skin.verticalScrollbar;
 			}
 		}
-
 	}
 
 	private Styles m_Styles;
@@ -261,7 +261,7 @@ public class ZoomArea
 				-(m_Translation.y - drawRect.height) / m_Scale.y,
 				drawRect.width / m_Scale.x,
 				drawRect.height / -m_Scale.y
-			);
+				);
 		}
 	}
 
@@ -310,7 +310,7 @@ public class ZoomArea
 			return new Bounds(
 				new Vector3((hBaseRangeMin + hBaseRangeMax) * 0.5f, (vBaseRangeMin + vBaseRangeMax) * 0.5f, 0),
 				new Vector3(hBaseRangeMax - hBaseRangeMin, vBaseRangeMax - vBaseRangeMin, 1)
-			);
+				);
 		}
 	}
 
@@ -363,10 +363,10 @@ public class ZoomArea
 	{
 		return (
 			(Event.current.button == 1 && Event.current.alt) // right+alt drag
-			//|| (Event.current.button == 0 && Event.current.command) // left+commend drag
-			//|| (Event.current.button == 2 && Event.current.command) // middle+command drag
+		    //|| (Event.current.button == 0 && Event.current.command) // left+commend drag
+		    //|| (Event.current.button == 2 && Event.current.command) // middle+command drag
 
-		);
+			);
 	}
 
 	private bool IsPanEvent()
@@ -374,8 +374,9 @@ public class ZoomArea
 		return (
 			(Event.current.button == 0 && Event.current.alt) // left+alt drag
 			|| (Event.current.button == 2 && !Event.current.command) // middle drag
-		);
+			);
 	}
+
 	public ZoomArea()
 	{
 		m_MinimalGUI = false;
@@ -390,7 +391,7 @@ public class ZoomArea
 	{
 		if (styles.horizontalScrollbar == null)
 			styles.InitGUIStyles(m_MinimalGUI);
-		
+
 		GUILayout.BeginArea(m_DrawArea, styles.background);
 		HandleZoomAndPanEvents(m_DrawArea);
 		GUILayout.EndArea();
@@ -463,7 +464,6 @@ public class ZoomArea
 
 	public void EndViewGUI()
 	{
-
 	}
 
 	private void Pan()
@@ -532,41 +532,41 @@ public class ZoomArea
 		{
 			float xLerp = Mathf.InverseLerp(oldArea.width, newArea.width, hScaleMin);
 			newArea = new Rect(
-				Mathf.Lerp(oldArea.x, newArea.x, xLerp),
-				newArea.y,
-				Mathf.Lerp(oldArea.width, newArea.width, xLerp),
-				newArea.height
-			);
+					Mathf.Lerp(oldArea.x, newArea.x, xLerp),
+					newArea.y,
+					Mathf.Lerp(oldArea.width, newArea.width, xLerp),
+					newArea.height
+					);
 		}
 		if (newArea.height < oldArea.height - epsilon)
 		{
 			float yLerp = Mathf.InverseLerp(oldArea.height, newArea.height, vScaleMin);
 			newArea = new Rect(
-				newArea.x,
-				Mathf.Lerp(oldArea.y, newArea.y, yLerp),
-				newArea.width,
-				Mathf.Lerp(oldArea.height, newArea.height, yLerp)
-			);
+					newArea.x,
+					Mathf.Lerp(oldArea.y, newArea.y, yLerp),
+					newArea.width,
+					Mathf.Lerp(oldArea.height, newArea.height, yLerp)
+					);
 		}
 		if (newArea.width > oldArea.width + epsilon)
 		{
 			float xLerp = Mathf.InverseLerp(oldArea.width, newArea.width, hScaleMax);
 			newArea = new Rect(
-				Mathf.Lerp(oldArea.x, newArea.x, xLerp),
-				newArea.y,
-				Mathf.Lerp(oldArea.width, newArea.width, xLerp),
-				newArea.height
-			);
+					Mathf.Lerp(oldArea.x, newArea.x, xLerp),
+					newArea.y,
+					Mathf.Lerp(oldArea.width, newArea.width, xLerp),
+					newArea.height
+					);
 		}
 		if (newArea.height > oldArea.height + epsilon)
 		{
 			float yLerp = Mathf.InverseLerp(oldArea.height, newArea.height, vScaleMax);
 			newArea = new Rect(
-				newArea.x,
-				Mathf.Lerp(oldArea.y, newArea.y, yLerp),
-				newArea.width,
-				Mathf.Lerp(oldArea.height, newArea.height, yLerp)
-			);
+					newArea.x,
+					Mathf.Lerp(oldArea.y, newArea.y, yLerp),
+					newArea.width,
+					Mathf.Lerp(oldArea.height, newArea.height, yLerp)
+					);
 		}
 
 		// Enforce ranges

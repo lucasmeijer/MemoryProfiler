@@ -14,9 +14,9 @@ namespace Assets.Editor.Treemap
 		public Group _group;
 		public Rect _position;
 		public int _index;
-
+		
 		public ThingInMemory _thingInMemory;
-
+		
 		public int memorySize { get { return _thingInMemory.size; } }
 		public string name { get { return _thingInMemory.caption; } }
 		public Color color { get { return _group.color; } }

@@ -12,14 +12,14 @@ namespace MemoryProfilerWindow
 	{
 		CrawledMemorySnapshot _unpackedCrawl;
 		private ZoomArea _ZoomArea;
-		private Dictionary<string, Group> _groups = new Dictionary<string, Group> ();
-		private List<Item> _items = new List<Item> ();
-		private List<Mesh> _cachedMeshes = new List<Mesh> ();
+		private Dictionary<string, Group> _groups = new Dictionary<string, Group>();
+		private List<Item> _items = new List<Item>();
+		private List<Mesh> _cachedMeshes = new List<Mesh>();
 		private Item _selectedItem;
 		private Item _mouseDownItem;
 		MemoryProfilerWindow _hostWindow;
 
-		public TreeMapView (MemoryProfilerWindow hostWindow, CrawledMemorySnapshot _unpackedCrawl)
+		public TreeMapView(MemoryProfilerWindow hostWindow, CrawledMemorySnapshot _unpackedCrawl)
 		{
 			this._unpackedCrawl = _unpackedCrawl;
 			this._hostWindow = hostWindow;
@@ -36,8 +36,8 @@ namespace MemoryProfilerWindow
 				vBaseRangeMax = 110f,
 				shownArea = new Rect(-110f, -110f, 220f, 220f)
 			};
-			RefreshCaches ();
-			RefreshMesh ();
+			RefreshCaches();
+			RefreshMesh();
 		}
 
 		public void Draw()
@@ -54,26 +54,24 @@ namespace MemoryProfilerWindow
 					{
 						switch (Event.current.type)
 						{
-						case EventType.MouseDown:
-							_mouseDownItem = firstOrDefault;
-							break;
+							case EventType.MouseDown:
+								_mouseDownItem = firstOrDefault;
+								break;
 
-						case EventType.MouseUp:
-							if (_mouseDownItem == firstOrDefault)
-							{
-								_hostWindow.SelectThing(firstOrDefault._thingInMemory);
-								Event.current.Use();
-								return;
-							}
-							break;
+							case EventType.MouseUp:
+								if (_mouseDownItem == firstOrDefault)
+								{
+									_hostWindow.SelectThing(firstOrDefault._thingInMemory);
+									Event.current.Use();
+									return;
+								}
+								break;
 						}
-
-
 					}
 				}
 			}
 
-			Rect r = new Rect(0f, 25f, _hostWindow.position.width-_hostWindow._inspector.width, _hostWindow.position.height - 25f);
+			Rect r = new Rect(0f, 25f, _hostWindow.position.width - _hostWindow._inspector.width, _hostWindow.position.height - 25f);
 
 			_ZoomArea.rect = r;
 			_ZoomArea.BeginViewGUI();
@@ -87,10 +85,10 @@ namespace MemoryProfilerWindow
 			_hostWindow.Repaint();
 		}
 
-		public void SelectThing (ThingInMemory thing)
+		public void SelectThing(ThingInMemory thing)
 		{
-			_selectedItem = _items.First (i => i._thingInMemory == thing);
-			RefreshMesh ();
+			_selectedItem = _items.First(i => i._thingInMemory == thing);
+			RefreshMesh();
 		}
 
 		void RefreshCaches()
@@ -273,8 +271,7 @@ namespace MemoryProfilerWindow
 				return (thing as NativeUnityEngineObject).className;
 			//			if (thing is ManagedObject)
 			//				return (thing as ManagedObject).typeDescription.name;
-			return thing.GetType ().FullName;
+			return thing.GetType().FullName;
 		}
 	}
 }
-

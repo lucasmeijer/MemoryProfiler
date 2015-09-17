@@ -26,15 +26,15 @@ namespace MemoryProfilerWindow
 
 		Vector2 _scrollPosition;
 
-        [NonSerialized]
+		[NonSerialized]
 		private bool _registered = false;
-	 	public Inspector _inspector;
+		public Inspector _inspector;
 		TreeMapView _treeMapView;
 
-	    [MenuItem("Window/MemoryProfiler")]
+		[MenuItem("Window/MemoryProfiler")]
 		static void Create()
 		{
-			EditorWindow.GetWindow<MemoryProfilerWindow> ();
+			EditorWindow.GetWindow<MemoryProfilerWindow>();
 		}
 
 		[MenuItem("Window/MemoryProfilerInspect")]
@@ -44,7 +44,7 @@ namespace MemoryProfilerWindow
 
 		public void OnDisable()
 		{
-		//	UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived -= IncomingSnapshot;
+			//	UnityEditor.MemoryProfiler.MemorySnapshot.OnSnapshotReceived -= IncomingSnapshot;
 		}
 
 		public void Initialize()
@@ -56,32 +56,33 @@ namespace MemoryProfilerWindow
 			}
 
 			if (_unpackedCrawl == null && _packedCrawled != null && _packedCrawled.valid)
-				Unpack ();
+				Unpack();
 		}
 
 		void OnGUI()
 		{
 			Initialize();
 
-			if (GUILayout.Button ("Take Snapshot")) {
-				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot ();
+			if (GUILayout.Button("Take Snapshot"))
+			{
+				UnityEditor.MemoryProfiler.MemorySnapshot.RequestNewSnapshot();
 			}
 
-		   	if (_treeMapView != null)
-				_treeMapView.Draw ();
+			if (_treeMapView != null)
+				_treeMapView.Draw();
 			if (_inspector != null)
 				_inspector.Draw();
-            
+
 			//RenderDebugList();
 		}
 
 		public void SelectThing(ThingInMemory thing)
 		{
-			_inspector.SelectThing (thing);
-			_treeMapView.SelectThing (thing);
+			_inspector.SelectThing(thing);
+			_treeMapView.SelectThing(thing);
 		}
 
-	    private void RenderDebugList()
+		private void RenderDebugList()
 		{
 			_scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
 
@@ -103,23 +104,19 @@ namespace MemoryProfilerWindow
 			GUILayout.EndScrollView();
 		}
 
-		void Unpack ()
+		void Unpack()
 		{
-			_unpackedCrawl = CrawlDataUnpacker.Unpack (_packedCrawled);
-			_inspector = new Inspector (this, _unpackedCrawl, _snapshot);
-			_treeMapView = new TreeMapView (this, _unpackedCrawl);
+			_unpackedCrawl = CrawlDataUnpacker.Unpack(_packedCrawled);
+			_inspector = new Inspector(this, _unpackedCrawl, _snapshot);
+			_treeMapView = new TreeMapView(this, _unpackedCrawl);
 		}
 
 		void IncomingSnapshot(PackedMemorySnapshot snapshot)
 		{
 			_snapshot = snapshot;
 
-			_packedCrawled = new Crawler ().Crawl (_snapshot);
-			Unpack ();
-        }
-
-
-
+			_packedCrawled = new Crawler().Crawl(_snapshot);
+			Unpack();
+		}
 	}
 }
-
